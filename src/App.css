@@ -100,7 +100,7 @@ body {
 .admin-app {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 15px;
 }
 
 .admin-header {
@@ -110,8 +110,10 @@ body {
   padding: 20px;
   background: #1a1a2e;
   border-radius: 15px;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   border: 1px solid #2a2a3e;
+  flex-wrap: wrap;
+  gap: 15px;
 }
 
 .admin-header h1 {
@@ -133,6 +135,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
+  transition: background 0.3s;
 }
 
 .btn-logout:hover {
@@ -141,7 +144,7 @@ body {
 
 /* ADMIN PANEL */
 .admin-panel {
-  padding: 0 20px;
+  padding: 0 5px;
 }
 
 .msg {
@@ -151,6 +154,7 @@ body {
   border-radius: 10px;
   margin-bottom: 20px;
   text-align: center;
+  font-size: 0.95rem;
 }
 
 /* CONFIG SECTION */
@@ -159,7 +163,7 @@ body {
   padding: 25px;
   border-radius: 15px;
   border: 1px solid #2a2a3e;
-  margin-bottom: 30px;
+  margin-bottom: 25px;
 }
 
 .config-section h3 {
@@ -187,6 +191,7 @@ body {
   border-radius: 8px;
   color: #fff;
   font-size: 1rem;
+  width: 100%;
 }
 
 .dias-checks {
@@ -206,10 +211,16 @@ body {
   border: 1px solid #2a2a3e;
   cursor: pointer;
   font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+.dia-check:hover {
+  border-color: #e94560;
 }
 
 .dia-check input {
   cursor: pointer;
+  accent-color: #e94560;
 }
 
 .btn-generar {
@@ -222,10 +233,17 @@ body {
   font-weight: 700;
   cursor: pointer;
   margin-top: 10px;
+  width: 100%;
+  transition: transform 0.3s;
+}
+
+.btn-generar:hover:not(:disabled) {
+  transform: translateY(-2px);
 }
 
 .btn-generar:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* FILTERS */
@@ -237,7 +255,7 @@ body {
 }
 
 .filters button {
-  padding: 8px 18px;
+  padding: 10px 18px;
   background: #1a1a2e;
   border: 1px solid #2a2a3e;
   color: #aaa;
@@ -245,6 +263,9 @@ body {
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
+  transition: all 0.3s;
+  flex: 1;
+  min-width: 120px;
 }
 
 .filters button.active {
@@ -253,7 +274,12 @@ body {
   border-color: #e94560;
 }
 
-/* TURNOS TABLE */
+.filters button:hover:not(.active) {
+  border-color: #e94560;
+  color: #fff;
+}
+
+/* TURNOS TABLE - DESKTOP */
 .admin-dia {
   background: #1a1a2e;
   border-radius: 15px;
@@ -267,6 +293,7 @@ body {
   color: #e94560;
   font-size: 1.1rem;
   border-bottom: 1px solid #2a2a3e;
+  background: #0d0d0d;
 }
 
 .turnos-table-container {
@@ -292,15 +319,39 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
   background: #0d0d0d;
+  position: sticky;
+  top: 0;
 }
 
 .turnos-table tr.reservado {
   background: rgba(233, 69, 96, 0.05);
 }
 
+.turnos-table tr.confirmado-row {
+  background: rgba(76, 175, 80, 0.08) !important;
+  border-left: 3px solid #4caf50;
+}
+
 .horario-cell {
   font-weight: 700;
   color: #fff;
+  font-size: 1rem;
+}
+
+.telefono-cell {
+  font-weight: 600;
+}
+
+.telefono-link {
+  color: #e94560;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s;
+}
+
+.telefono-link:hover {
+  color: #ff6b81;
+  text-decoration: underline;
 }
 
 .checkbox-confirm,
@@ -317,10 +368,11 @@ body {
   cursor: pointer;
   font-size: 1.2rem;
   padding: 5px;
+  transition: transform 0.3s;
 }
 
 .btn-cancelar:hover {
-  transform: scale(1.2);
+  transform: scale(1.3);
 }
 
 .no-turnos {
@@ -328,47 +380,6 @@ body {
   color: #888;
   padding: 40px;
   font-size: 1.1rem;
-}
-
-/* RESPONSIVE */
-@media (max-width: 768px) {
-  .admin-header {
-    flex-direction: column;
-    gap: 15px;
-    text-align: center;
-  }
-
-  .turnos-table {
-    font-size: 0.8rem;
-  }
-
-  .turnos-table th,
-  .turnos-table td {
-    padding: 8px 10px;
-  }
-}
-
-/* FILA CONFIRMADA */
-.confirmado-row {
-  background: rgba(76, 175, 80, 0.08) !important;
-  border-left: 3px solid #4caf50;
-}
-
-/* TELÉFONO LINK */
-.telefono-cell {
-  font-weight: 600;
-}
-
-.telefono-link {
-  color: #e94560;
-  text-decoration: none;
-  font-weight: 600;
-  transition: color 0.3s;
-}
-
-.telefono-link:hover {
-  color: #ff6b81;
-  text-decoration: underline;
 }
 
 /* MODAL DE CONTACTO */
@@ -396,6 +407,8 @@ body {
   width: 100%;
   box-shadow: 0 10px 40px rgba(76, 175, 80, 0.3);
   animation: slideUp 0.3s ease-out;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -439,8 +452,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid #2a2a3e;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 
 .client-detail:last-child {
@@ -545,10 +560,178 @@ body {
   to { opacity: 1; }
 }
 
-/* RESPONSIVE MODAL */
-@media (max-width: 480px) {
+/* ═══════════════════════════════════════════
+   RESPONSIVE - TABLET (768px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .admin-app {
+    padding: 10px;
+  }
+
+  .admin-header {
+    flex-direction: column;
+    text-align: center;
+    padding: 15px;
+  }
+
+  .admin-header h1 {
+    font-size: 1.3rem;
+  }
+
+  .config-section {
+    padding: 20px;
+  }
+
+  .filters button {
+    min-width: 100px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+  }
+
+  .turnos-table {
+    font-size: 0.85rem;
+  }
+
+  .turnos-table th,
+  .turnos-table td {
+    padding: 10px 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE - MOBILE (600px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .admin-app {
+    padding: 8px;
+  }
+
+  .admin-header h1 {
+    font-size: 1.1rem;
+  }
+
+  .user-email {
+    font-size: 0.8rem;
+  }
+
+  .config-section {
+    padding: 15px;
+  }
+
+  .config-section h3 {
+    font-size: 1rem;
+  }
+
+  .dias-checks {
+    gap: 8px;
+  }
+
+  .dia-check {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .filters {
+    gap: 8px;
+  }
+
+  .filters button {
+    min-width: 0;
+    flex: 1 1 calc(50% - 8px);
+    font-size: 0.75rem;
+    padding: 8px 10px;
+  }
+
+  /* TABLA → CARDS EN MOBILE */
+  .turnos-table-container {
+    overflow-x: hidden;
+  }
+
+  .turnos-table,
+  .turnos-table thead,
+  .turnos-table tbody,
+  .turnos-table th,
+  .turnos-table td,
+  .turnos-table tr {
+    display: block;
+  }
+
+  .turnos-table thead {
+    display: none; /* Ocultar headers en mobile */
+  }
+
+  .turnos-table tr {
+    background: #0d0d0d;
+    border: 1px solid #2a2a3e;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 15px;
+    position: relative;
+  }
+
+  .turnos-table tr.reservado {
+    background: rgba(233, 69, 96, 0.05);
+    border-color: #e94560;
+  }
+
+  .turnos-table tr.confirmado-row {
+    border-left: 4px solid #4caf50 !important;
+  }
+
+  .turnos-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2a3e;
+    text-align: right;
+  }
+
+  .turnos-table td:last-child {
+    border-bottom: none;
+  }
+
+  .turnos-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: #888;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+    margin-right: 15px;
+  }
+
+  .horario-cell {
+    font-size: 1.3rem;
+    color: #e94560;
+    justify-content: center;
+    padding: 10px 0 !important;
+  }
+
+  .horario-cell::before {
+    display: none;
+  }
+
+  .checkbox-confirm,
+  .checkbox-habilitar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .btn-cancelar {
+    font-size: 1.4rem;
+    padding: 8px;
+  }
+
+  /* MODAL EN MOBILE */
   .contact-modal {
     padding: 20px;
+    border-radius: 15px;
+  }
+
+  .modal-header h3 {
+    font-size: 1.3rem;
   }
 
   .modal-contact-actions {
@@ -558,5 +741,41 @@ body {
   .btn-whatsapp,
   .btn-call {
     width: 100%;
+    padding: 16px;
+    font-size: 1.05rem;
+  }
+
+  .client-detail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .detail-value {
+    text-align: left;
+    font-size: 1rem;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE - MOBILE PEQUEÑO (380px)
+   ═══════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .admin-header h1 {
+    font-size: 1rem;
+  }
+
+  .filters button {
+    font-size: 0.7rem;
+    padding: 6px 8px;
+  }
+
+  .dia-check {
+    padding: 5px 8px;
+    font-size: 0.75rem;
+  }
+
+  .horario-cell {
+    font-size: 1.1rem;
   }
 }

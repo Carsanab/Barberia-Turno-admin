@@ -6,7 +6,7 @@ export default function AdminPanel({ API_URL }) {
   const [filter, setFilter] = useState('todos');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const [contactModal, setContactModal] = useState(null); // { turno, confirmado }
+  const [contactModal, setContactModal] = useState(null);
 
   useEffect(() => {
     fetchTurnos();
@@ -88,7 +88,6 @@ export default function AdminPanel({ API_URL }) {
       const data = await res.json();
       
       if (data.success) {
-        // Si se confirmó (no se desconfirmó), mostrar modal de contacto
         if (data.confirmado) {
           setContactModal({ turno, confirmado: true });
         }
@@ -125,17 +124,14 @@ export default function AdminPanel({ API_URL }) {
     }
   };
 
-  // Generar mensaje de WhatsApp
   const getWhatsAppMessage = (turno) => {
     const dayName = getDayName(turno.fecha);
     const dateFormatted = formatDate(turno.fecha);
     return `Hola ${turno.nombre}! 👋\n\nTe confirmamos tu turno en *The Barber Cut* ✂️\n\n📅 ${dayName} ${dateFormatted}\n🕐 ${turno.horario}\n\n¡Te esperamos!`;
   };
 
-  // Normalizar número para WhatsApp (agregar código de país si no lo tiene)
   const normalizePhoneForWhatsApp = (phone) => {
     const cleaned = phone.replace(/\D/g, '');
-    // Si no empieza con código de país, agregar 54 (Argentina) por defecto
     if (cleaned.length <= 10) {
       return `54${cleaned}`;
     }
@@ -278,16 +274,20 @@ export default function AdminPanel({ API_URL }) {
                 <tbody>
                   {grupos[fecha].map(t => (
                     <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''}`}>
-                      <td className="horario-cell">{t.horario}</td>
-                      <td>{t.nombre || '—'}</td>
-                      <td className="telefono-cell">
+                      <td className="horario-cell" data-label="Horario">
+                        {t.horario}
+                      </td>
+                      <td data-label="Cliente">
+                        {t.nombre || '—'}
+                      </td>
+                      <td className="telefono-cell" data-label="Teléfono">
                         {t.telefono ? (
                           <a href={`tel:${t.telefono}`} className="telefono-link">
                             📞 {t.telefono}
                           </a>
                         ) : '—'}
                       </td>
-                      <td>
+                      <td data-label="Confirmado">
                         <input
                           type="checkbox"
                           checked={t.confirmado}
@@ -295,7 +295,7 @@ export default function AdminPanel({ API_URL }) {
                           className="checkbox-confirm"
                         />
                       </td>
-                      <td>
+                      <td data-label="Habilitado">
                         <input
                           type="checkbox"
                           checked={t.habilitado}
@@ -303,7 +303,7 @@ export default function AdminPanel({ API_URL }) {
                           className="checkbox-habilitar"
                         />
                       </td>
-                      <td>
+                      <td data-label="Acciones">
                         {t.nombre && (
                           <button className="btn-cancelar" onClick={() => handleCancelar(t.id)}>
                             🗑️
