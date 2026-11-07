@@ -4,14 +4,21 @@ export default function AdminPanel({ API_URL }) {
   const [turnos, setTurnos] = useState([]);
   const [config, setConfig] = useState({ fechaHasta: '', diasHabilitados: '' });
   const [filter, setFilter] = useState('todos');
-  const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [contactModal, setContactModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [successModal, setSuccessModal] = useState(null); // ← NUEVO
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [weeks, setWeeks] = useState([]);
 
   useEffect(() => {
     fetchTurnos();
     fetchConfig();
   }, []);
+
+  useEffect(() => {
+    generateWeeks();
+  }, [turnos, weekOffset]);
 
   const fetchTurnos = async () => {
     try {
@@ -36,47 +43,83 @@ export default function AdminPanel({ API_URL }) {
     }
   };
 
+  const generateWeeks = () => {
+    if (turnos.length === 0) {
+      setWeeks([]);
+      return;
+    }
+
+    const fechasUnicas = [...new Set(turnos.map(t => t.fecha))].sort();
+    
+    const weeksArray = [];
+    for (let i = 0; i < fechasUnicas.length; i += 7) {
+      weeksArray.push(fechasUnicas.slice(i, i + 7));
+    }
+    
+    setWeeks(weeksArray);
+  };
+
   const handleGenerar = async () => {
     if (!config.fechaHasta || !config.diasHabilitados) {
-      setMsg('⚠️ Completá fecha hasta y días habilitados');
+      setSuccessModal({
+        title: '⚠️ Campos incompletos',
+        message: 'Completá fecha hasta y días habilitados antes de generar.',
+        icon: 'warning'
+      });
       return;
     }
 
-    if (!confirm('¿Generar turnos? Esto borrará los turnos existentes.')) {
-      return;
-    }
+    setConfirmModal({
+      title: '⚠️ Generar Turnos',
+      message: 'Esto borrará TODOS los turnos existentes y generará nuevos. ¿Continuar?',
+      icon: 'warning',
+      onConfirm: async () => {
+        setLoading(true);
+        setConfirmModal(null);
+        try {
+          await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'updateConfig',
+              fechaHasta: config.fechaHasta,
+              diasHabilitados: config.diasHabilitados
+            })
+          });
 
-    setLoading(true);
-    try {
-      await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'updateConfig',
-          fechaHasta: config.fechaHasta,
-          diasHabilitados: config.diasHabilitados
-        })
-      });
-
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'generarDesdeConfig',
-          fechaHasta: config.fechaHasta,
-          diasHabilitados: config.diasHabilitados
-        })
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setMsg(`✅ ${data.message}`);
-        fetchTurnos();
-      } else {
-        setMsg('❌ ' + data.error);
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'generarDesdeConfig',
+              fechaHasta: config.fechaHasta,
+              diasHabilitados: config.diasHabilitados
+            })
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+            setSuccessModal({
+              title: '✅ Proceso Completado',
+              message: data.message || 'Los turnos se generaron correctamente.',
+              icon: 'success'
+            });
+            fetchTurnos();
+          } else {
+            setSuccessModal({
+              title: '❌ Error',
+              message: data.error || 'Ocurrió un error al generar los turnos.',
+              icon: 'error'
+            });
+          }
+        } catch (e) {
+          setSuccessModal({
+            title: '❌ Error de conexión',
+            message: 'No se pudo conectar con el servidor. Intentá de nuevo.',
+            icon: 'error'
+          });
+        }
+        setLoading(false);
       }
-    } catch (e) {
-      setMsg('❌ Error de conexión');
-    }
-    setLoading(false);
+    });
   };
 
   const handleConfirmar = async (turno) => {
@@ -110,18 +153,74 @@ export default function AdminPanel({ API_URL }) {
     }
   };
 
-  const handleCancelar = async (id) => {
-    if (!confirm('¿Cancelar esta reserva?')) return;
+  const handleCancelar = (turno) => {
+    setConfirmModal({
+      title: '🗑️ Cancelar Reserva',
+      message: `¿Cancelar la reserva de ${turno.nombre} del ${formatDate(turno.fecha)} a las ${turno.horario}?`,
+      icon: 'delete',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'cancelar', id: turno.id })
+          });
+          setSuccessModal({
+            title: '✅ Proceso Completado',
+            message: `La reserva de ${turno.nombre} fue cancelada correctamente.`,
+            icon: 'success'
+          });
+          fetchTurnos();
+        } catch (e) {
+          setSuccessModal({
+            title: '❌ Error',
+            message: 'No se pudo cancelar la reserva.',
+            icon: 'error'
+          });
+        }
+      }
+    });
+  };
+
+  const handleEliminarDia = (fecha) => {
+    const turnosDelDia = turnos.filter(t => t.fecha === fecha);
+    const reservados = turnosDelDia.filter(t => t.nombre).length;
     
-    try {
-      await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'cancelar', id })
-      });
-      fetchTurnos();
-    } catch (e) {
-      console.error(e);
-    }
+    setConfirmModal({
+      title: '🗑️ Eliminar Día Completo',
+      message: `Se eliminarán ${turnosDelDia.length} turnos (${reservados} reservados) del ${formatDate(fecha)}. Esta acción no se puede deshacer.`,
+      icon: 'danger',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'eliminarDia', fecha })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setSuccessModal({
+              title: '✅ Proceso Completado',
+              message: `Se eliminaron ${data.eliminados} turnos del ${formatDate(fecha)} correctamente.`,
+              icon: 'success'
+            });
+            fetchTurnos();
+          } else {
+            setSuccessModal({
+              title: '❌ Error',
+              message: data.error || 'No se pudo eliminar el día.',
+              icon: 'error'
+            });
+          }
+        } catch (e) {
+          setSuccessModal({
+            title: '❌ Error de conexión',
+            message: 'No se pudo conectar con el servidor.',
+            icon: 'error'
+          });
+        }
+      }
+    });
   };
 
   const getWhatsAppMessage = (turno) => {
@@ -160,9 +259,9 @@ export default function AdminPanel({ API_URL }) {
     return true;
   });
 
-  const agruparPorFecha = () => {
+  const agruparPorFecha = (listaTurnos) => {
     const grupos = {};
-    turnosFiltrados.forEach(t => {
+    listaTurnos.forEach(t => {
       if (!grupos[t.fecha]) grupos[t.fecha] = [];
       grupos[t.fecha].push(t);
     });
@@ -183,18 +282,32 @@ export default function AdminPanel({ API_URL }) {
     return names[date.getDay()];
   };
 
+  const getDayNameFull = (dateStr) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(year, month - 1, day);
+    const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    return names[date.getDay()];
+  };
+
   const diasSemana = [
     { v: 0, l: 'Dom' }, { v: 1, l: 'Lun' }, { v: 2, l: 'Mar' },
     { v: 3, l: 'Mié' }, { v: 4, l: 'Jue' }, { v: 5, l: 'Vie' }, { v: 6, l: 'Sáb' }
   ];
 
-  const grupos = agruparPorFecha();
-  const fechas = Object.keys(grupos).sort();
+  const handleWeekChange = (direction) => {
+    const newOffset = weekOffset + direction;
+    if (newOffset >= 0 && newOffset < weeks.length) {
+      setWeekOffset(newOffset);
+    }
+  };
+
+  const currentWeekFechas = weeks[weekOffset] || [];
+  const turnosDeLaSemana = turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha));
+  const gruposSemana = agruparPorFecha(turnosDeLaSemana);
 
   return (
     <div className="admin-panel">
-      {msg && <div className="msg">{msg}</div>}
-
       {/* CONFIGURACIÓN */}
       <div className="config-section">
         <h3>⚙️ Generar Turnos</h3>
@@ -252,71 +365,187 @@ export default function AdminPanel({ API_URL }) {
         ))}
       </div>
 
-      {/* LISTA DE TURNOS */}
-      {fechas.length === 0 ? (
+      {/* NAVEGACIÓN DE SEMANAS */}
+      {weeks.length > 0 && (
+        <div className="week-nav-admin">
+          <button 
+            className="week-nav-btn" 
+            onClick={() => handleWeekChange(-1)}
+            disabled={weekOffset === 0}
+          >
+            ← Anterior
+          </button>
+          <span className="week-label">
+            Semana {weekOffset + 1} de {weeks.length}
+          </span>
+          <button 
+            className="week-nav-btn" 
+            onClick={() => handleWeekChange(1)}
+            disabled={weekOffset >= weeks.length - 1}
+          >
+            Siguiente →
+          </button>
+        </div>
+      )}
+
+      {/* TURNOS POR SEMANA */}
+      {currentWeekFechas.length === 0 ? (
         <p className="no-turnos">No hay turnos para mostrar</p>
       ) : (
-        fechas.map(fecha => (
-          <div key={fecha} className="admin-dia">
-            <h3>{getDayName(fecha)} {formatDate(fecha)}</h3>
-            <div className="turnos-table-container">
-              <table className="turnos-table">
-                <thead>
-                  <tr>
-                    <th>Horario</th>
-                    <th>Cliente</th>
-                    <th>Teléfono</th>
-                    <th>Confirmado</th>
-                    <th>Habilitado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grupos[fecha].map(t => (
-                    <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''}`}>
-                      <td className="horario-cell" data-label="Horario">
-                        {t.horario}
-                      </td>
-                      <td data-label="Cliente">
-                        {t.nombre || '—'}
-                      </td>
-                      <td className="telefono-cell" data-label="Teléfono">
-                        {t.telefono ? (
-                          <a href={`tel:${t.telefono}`} className="telefono-link">
-                            📞 {t.telefono}
-                          </a>
-                        ) : '—'}
-                      </td>
-                      <td data-label="Confirmado">
-                        <input
-                          type="checkbox"
-                          checked={t.confirmado}
-                          onChange={() => handleConfirmar(t)}
-                          className="checkbox-confirm"
-                        />
-                      </td>
-                      <td data-label="Habilitado">
-                        <input
-                          type="checkbox"
-                          checked={t.habilitado}
-                          onChange={() => handleToggleHabilitar(t.id)}
-                          className="checkbox-habilitar"
-                        />
-                      </td>
-                      <td data-label="Acciones">
-                        {t.nombre && (
-                          <button className="btn-cancelar" onClick={() => handleCancelar(t.id)}>
-                            🗑️
-                          </button>
-                        )}
-                      </td>
+        currentWeekFechas.map(fecha => {
+          const turnosDelDia = gruposSemana[fecha] || [];
+          if (turnosDelDia.length === 0) return null;
+          
+          return (
+            <div key={fecha} className="admin-dia">
+              <div className="dia-header">
+                <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
+                <button 
+                  className="btn-eliminar-dia"
+                  onClick={() => handleEliminarDia(fecha)}
+                  title="Eliminar todos los turnos de este día"
+                >
+                  🗑️ Eliminar día
+                </button>
+              </div>
+              <div className="turnos-table-container">
+                <table className="turnos-table">
+                  <thead>
+                    <tr>
+                      <th>Horario</th>
+                      <th>Cliente</th>
+                      <th>Teléfono</th>
+                      <th>Confirmado</th>
+                      <th>Habilitado</th>
+                      <th>Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {turnosDelDia.map(t => (
+                      <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''}`}>
+                        <td className="horario-cell" data-label="Horario">
+                          {t.horario}
+                        </td>
+                        <td data-label="Cliente">
+                          {t.nombre || '—'}
+                        </td>
+                        <td className="telefono-cell" data-label="Teléfono">
+                          {t.telefono ? (
+                            <a href={`tel:${t.telefono}`} className="telefono-link">
+                              📞 {t.telefono}
+                            </a>
+                          ) : '—'}
+                        </td>
+                        <td data-label="Confirmado">
+                          <input
+                            type="checkbox"
+                            checked={t.confirmado}
+                            onChange={() => handleConfirmar(t)}
+                            className="checkbox-confirm"
+                          />
+                        </td>
+                        <td data-label="Habilitado">
+                          <input
+                            type="checkbox"
+                            checked={t.habilitado}
+                            onChange={() => handleToggleHabilitar(t.id)}
+                            className="checkbox-habilitar"
+                          />
+                        </td>
+                        <td data-label="Acciones">
+                          {t.nombre && (
+                            <button className="btn-cancelar" onClick={() => handleCancelar(t)}>
+                              🗑️
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {/* MODAL DE ÉXITO / ERROR */}
+      {successModal && (
+        <div className="modal-overlay" onClick={() => setSuccessModal(null)}>
+          <div className="success-modal" onClick={e => e.stopPropagation()}>
+            <div className={`success-icon-container ${successModal.icon}`}>
+              {successModal.icon === 'success' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              )}
+              {successModal.icon === 'warning' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2.5">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              )}
+              {successModal.icon === 'error' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              )}
+            </div>
+            <h3>{successModal.title}</h3>
+            <p className="success-message">{successModal.message}</p>
+            <button className="btn-success-close" onClick={() => setSuccessModal(null)}>
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN */}
+      {confirmModal && (
+        <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className={`modal-icon-container ${confirmModal.icon}`}>
+              {confirmModal.icon === 'warning' && (
+                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              )}
+              {confirmModal.icon === 'delete' && (
+                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#e94560" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                  <line x1="10" y1="11" x2="10" y2="17"/>
+                  <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+              )}
+              {confirmModal.icon === 'danger' && (
+                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              )}
+            </div>
+            <h3>{confirmModal.title}</h3>
+            <p className="modal-message">{confirmModal.message}</p>
+            <div className="modal-actions-confirm">
+              <button className="btn-modal-cancel" onClick={() => setConfirmModal(null)}>
+                Cancelar
+              </button>
+              <button 
+                className={`btn-modal-confirm ${confirmModal.icon}`} 
+                onClick={confirmModal.onConfirm}
+              >
+                Confirmar
+              </button>
             </div>
           </div>
-        ))
+        </div>
       )}
 
       {/* MODAL DE CONTACTO */}

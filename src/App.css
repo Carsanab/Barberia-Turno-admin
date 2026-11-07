@@ -779,3 +779,224 @@ body {
     font-size: 1.1rem;
   }
 }
+
+/* NAVEGACIÓN DE SEMANAS ADMIN */
+.week-nav-admin {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 25px;
+  background: #1a1a2e;
+  padding: 15px 20px;
+  border-radius: 12px;
+  border: 1px solid #2a2a3e;
+}
+
+.week-nav-btn {
+  padding: 10px 20px;
+  background: #0d0d0d;
+  border: 1px solid #2a2a3e;
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+.week-nav-btn:hover:not(:disabled) {
+  background: #e94560;
+  border-color: #e94560;
+}
+
+.week-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.week-label {
+  color: #aaa;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+/* HEADER DE DÍA CON BOTÓN ELIMINAR */
+.dia-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #2a2a3e;
+  background: #0d0d0d;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dia-header h3 {
+  color: #e94560;
+  font-size: 1.1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.btn-eliminar-dia {
+  padding: 8px 16px;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid #f44336;
+  color: #f44336;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-eliminar-dia:hover {
+  background: #f44336;
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* MODAL DE CONFIRMACIÓN BONITO */
+.confirm-modal {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #2a2a3e;
+  border-radius: 20px;
+  padding: 30px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease-out;
+  text-align: center;
+}
+
+.modal-icon-container {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  animation: scaleIn 0.5s ease-out;
+}
+
+.modal-icon-container.warning {
+  background: rgba(255, 152, 0, 0.15);
+}
+
+.modal-icon-container.delete {
+  background: rgba(233, 69, 96, 0.15);
+}
+
+.modal-icon-container.danger {
+  background: rgba(244, 67, 54, 0.15);
+}
+
+.confirm-modal h3 {
+  font-size: 1.4rem;
+  color: #fff;
+  margin-bottom: 15px;
+  font-weight: 700;
+}
+
+.modal-message {
+  color: #aaa;
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 25px;
+}
+
+.modal-actions-confirm {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-modal-cancel {
+  flex: 1;
+  padding: 14px;
+  background: #2a2a3e;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-modal-cancel:hover {
+  background: #3a3a4e;
+}
+
+.btn-modal-confirm {
+  flex: 1;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: white;
+  transition: all 0.3s;
+}
+
+.btn-modal-confirm.warning {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+}
+
+.btn-modal-confirm.warning:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);
+}
+
+.btn-modal-confirm.delete {
+  background: linear-gradient(135deg, #e94560, #c23152);
+}
+
+.btn-modal-confirm.delete:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+}
+
+.btn-modal-confirm.danger {
+  background: linear-gradient(135deg, #f44336, #d32f2f);
+}
+
+.btn-modal-confirm.danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(244, 67, 54, 0.4);
+}
+
+/* RESPONSIVE MODAL */
+@media (max-width: 480px) {
+  .confirm-modal {
+    padding: 20px;
+    margin: 10px;
+  }
+
+  .modal-actions-confirm {
+    flex-direction: column;
+  }
+
+  .dia-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-eliminar-dia {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .week-nav-admin {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+}
