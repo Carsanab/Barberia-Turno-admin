@@ -7,9 +7,11 @@ export default function AdminPanel({ API_URL }) {
   const [loading, setLoading] = useState(false);
   const [contactModal, setContactModal] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
-  const [successModal, setSuccessModal] = useState(null); // ← NUEVO
+  const [successModal, setSuccessModal] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weeks, setWeeks] = useState([]);
+  const [expandedDays, setExpandedDays] = useState({}); // { '2026-11-06': true }
+  const [searchDate, setSearchDate] = useState('');
 
   useEffect(() => {
     fetchTurnos();
@@ -50,13 +52,55 @@ export default function AdminPanel({ API_URL }) {
     }
 
     const fechasUnicas = [...new Set(turnos.map(t => t.fecha))].sort();
-    
     const weeksArray = [];
     for (let i = 0; i < fechasUnicas.length; i += 7) {
       weeksArray.push(fechasUnicas.slice(i, i + 7));
     }
-    
     setWeeks(weeksArray);
+  };
+
+  // Toggle expandir/colapsar día
+  const toggleDay = (fecha) => {
+    setExpandedDays(prev => ({
+      ...prev,
+      [fecha]: !prev[fecha]
+    }));
+  };
+
+  // Expandir todos los días de la semana actual
+  const expandAllWeek = () => {
+    const currentWeekFechas = weeks[weekOffset] || [];
+    const newExpanded = { ...expandedDays };
+    currentWeekFechas.forEach(f => { newExpanded[f] = true; });
+    setExpandedDays(newExpanded);
+  };
+
+  // Colapsar todos
+  const collapseAll = () => {
+    setExpandedDays({});
+  };
+
+  // Ir a una fecha específica
+  const goToDate = (fecha) => {
+    setSearchDate(fecha);
+    // Buscar en qué semana está esa fecha
+    for (let i = 0; i < weeks.length; i++) {
+      if (weeks[i].includes(fecha)) {
+        setWeekOffset(i);
+        // Auto-expandir ese día
+        setExpandedDays(prev => ({ ...prev, [fecha]: true }));
+        break;
+      }
+    }
+  };
+
+  // Estadísticas
+  const stats = {
+    total: turnos.length,
+    reservados: turnos.filter(t => t.nombre).length,
+    pendientes: turnos.filter(t => t.nombre && !t.confirmado).length,
+    confirmados: turnos.filter(t => t.confirmado).length,
+    libres: turnos.filter(t => !t.nombre && t.habilitado).length
   };
 
   const handleGenerar = async () => {
@@ -113,7 +157,7 @@ export default function AdminPanel({ API_URL }) {
         } catch (e) {
           setSuccessModal({
             title: '❌ Error de conexión',
-            message: 'No se pudo conectar con el servidor. Intentá de nuevo.',
+            message: 'No se pudo conectar con el servidor.',
             icon: 'error'
           });
         }
@@ -122,7 +166,36 @@ export default function AdminPanel({ API_URL }) {
     });
   };
 
-  const handleConfirmar = async (turno) => {
+  // VALIDACIÓN: No confirmar si no hay info del cliente
+  const handleConfirmar = (turno) => {
+    // Si ya está confirmado, lo desconfirmamos sin validar
+    if (turno.confirmado) {
+      confirmarTurnoAPI(turno);
+      return;
+    }
+
+    // Si no está confirmado, validar que tenga info del cliente
+    if (!turno.nombre || !turno.telefono) {
+      setSuccessModal({
+        title: '⚠️ Información incompleta',
+        message: `No se puede confirmar el turno de las ${turno.horario} porque falta información del cliente (nombre y teléfono).`,
+        icon: 'warning'
+      });
+      return;
+    }
+
+    setConfirmModal({
+      title: '✅ Confirmar Turno',
+      message: `¿Confirmar el turno de ${turno.nombre} (${turno.telefono}) del ${formatDate(turno.fecha)} a las ${turno.horario}?`,
+      icon: 'confirm',
+      onConfirm: async () => {
+        setConfirmModal(null);
+        await confirmarTurnoAPI(turno);
+      }
+    });
+  };
+
+  const confirmarTurnoAPI = async (turno) => {
     try {
       const res = await fetch(API_URL, {
         method: 'POST',
@@ -231,9 +304,7 @@ export default function AdminPanel({ API_URL }) {
 
   const normalizePhoneForWhatsApp = (phone) => {
     const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length <= 10) {
-      return `54${cleaned}`;
-    }
+    if (cleaned.length <= 10) return `54${cleaned}`;
     return cleaned;
   };
 
@@ -299,6 +370,7 @@ export default function AdminPanel({ API_URL }) {
     const newOffset = weekOffset + direction;
     if (newOffset >= 0 && newOffset < weeks.length) {
       setWeekOffset(newOffset);
+      setExpandedDays({}); // Colapsar al cambiar de semana
     }
   };
 
@@ -306,8 +378,50 @@ export default function AdminPanel({ API_URL }) {
   const turnosDeLaSemana = turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha));
   const gruposSemana = agruparPorFecha(turnosDeLaSemana);
 
+  // Obtener info resumida de un día
+  const getDaySummary = (fecha) => {
+    const turnosDelDia = turnos.filter(t => t.fecha === fecha);
+    const reservados = turnosDelDia.filter(t => t.nombre).length;
+    const pendientes = turnosDelDia.filter(t => t.nombre && !t.confirmado).length;
+    const confirmados = turnosDelDia.filter(t => t.confirmado).length;
+    return { total: turnosDelDia.length, reservados, pendientes, confirmados };
+  };
+
   return (
     <div className="admin-panel">
+      {/* ESTADÍSTICAS RÁPIDAS */}
+      <div className="stats-bar">
+        <div className="stat-card stat-total">
+          <span className="stat-number">{stats.total}</span>
+          <span className="stat-label">Total</span>
+        </div>
+        <div className="stat-card stat-reservados">
+          <span className="stat-number">{stats.reservados}</span>
+          <span className="stat-label">Reservados</span>
+        </div>
+        <div className="stat-card stat-pendientes">
+          <span className="stat-number">{stats.pendientes}</span>
+          <span className="stat-label">⏳ Pendientes</span>
+        </div>
+        <div className="stat-card stat-confirmados">
+          <span className="stat-number">{stats.confirmados}</span>
+          <span className="stat-label">✅ Confirmados</span>
+        </div>
+      </div>
+
+      {/* ALERTA DE PENDIENTES */}
+      {stats.pendientes > 0 && (
+        <div className="alert-pendientes" onClick={() => setFilter('pendientes')}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Tenés <strong>{stats.pendientes} turno{stats.pendientes > 1 ? 's' : ''}</strong> pendiente{stats.pendientes > 1 ? 's' : ''} de confirmar</span>
+          <span className="alert-arrow">→</span>
+        </div>
+      )}
+
       {/* CONFIGURACIÓN */}
       <div className="config-section">
         <h3>⚙️ Generar Turnos</h3>
@@ -352,6 +466,21 @@ export default function AdminPanel({ API_URL }) {
         </button>
       </div>
 
+      {/* BUSCADOR DE FECHA */}
+      <div className="search-section">
+        <label>🔍 Ir a fecha específica:</label>
+        <input
+          type="date"
+          value={searchDate}
+          min={new Date().toISOString().split('T')[0]}
+          onChange={e => {
+            setSearchDate(e.target.value);
+            if (e.target.value) goToDate(e.target.value);
+          }}
+          className="search-date-input"
+        />
+      </div>
+
       {/* FILTROS */}
       <div className="filters">
         {['todos', 'reservados', 'pendientes', 'confirmados', 'libres'].map(f => (
@@ -375,9 +504,13 @@ export default function AdminPanel({ API_URL }) {
           >
             ← Anterior
           </button>
-          <span className="week-label">
-            Semana {weekOffset + 1} de {weeks.length}
-          </span>
+          <div className="week-actions">
+            <span className="week-label">Semana {weekOffset + 1} de {weeks.length}</span>
+            <div className="week-buttons">
+              <button className="btn-small" onClick={expandAllWeek}>Expandir todo</button>
+              <button className="btn-small" onClick={collapseAll}>Colapsar todo</button>
+            </div>
+          </div>
           <button 
             className="week-nav-btn" 
             onClick={() => handleWeekChange(1)}
@@ -388,7 +521,7 @@ export default function AdminPanel({ API_URL }) {
         </div>
       )}
 
-      {/* TURNOS POR SEMANA */}
+      {/* DÍAS COMO ACORDEÓN */}
       {currentWeekFechas.length === 0 ? (
         <p className="no-turnos">No hay turnos para mostrar</p>
       ) : (
@@ -396,74 +529,116 @@ export default function AdminPanel({ API_URL }) {
           const turnosDelDia = gruposSemana[fecha] || [];
           if (turnosDelDia.length === 0) return null;
           
+          const summary = getDaySummary(fecha);
+          const isExpanded = expandedDays[fecha] || false;
+          const hasPendientes = summary.pendientes > 0;
+
           return (
-            <div key={fecha} className="admin-dia">
-              <div className="dia-header">
-                <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
+            <div key={fecha} className={`day-accordion ${isExpanded ? 'expanded' : ''} ${hasPendientes ? 'has-pendientes' : ''}`}>
+              {/* HEADER DEL DÍA (clickable) */}
+              <div className="day-header" onClick={() => toggleDay(fecha)}>
+                <div className="day-header-left">
+                  <svg 
+                    className={`chevron ${isExpanded ? 'rotated' : ''}`}
+                    width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  >
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                  <div className="day-title">
+                    <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
+                    <div className="day-badges">
+                      <span className="badge badge-total">{summary.total} turnos</span>
+                      {summary.reservados > 0 && (
+                        <span className="badge badge-reservados">{summary.reservados} reservados</span>
+                      )}
+                      {summary.confirmados > 0 && (
+                        <span className="badge badge-confirmados">{summary.confirmados} confirmados</span>
+                      )}
+                      {hasPendientes && (
+                        <span className="badge badge-pendientes">⏳ {summary.pendientes} pendientes</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <button 
                   className="btn-eliminar-dia"
-                  onClick={() => handleEliminarDia(fecha)}
+                  onClick={(e) => { e.stopPropagation(); handleEliminarDia(fecha); }}
                   title="Eliminar todos los turnos de este día"
                 >
-                  🗑️ Eliminar día
+                  🗑️
                 </button>
               </div>
-              <div className="turnos-table-container">
-                <table className="turnos-table">
-                  <thead>
-                    <tr>
-                      <th>Horario</th>
-                      <th>Cliente</th>
-                      <th>Teléfono</th>
-                      <th>Confirmado</th>
-                      <th>Habilitado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {turnosDelDia.map(t => (
-                      <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''}`}>
-                        <td className="horario-cell" data-label="Horario">
-                          {t.horario}
-                        </td>
-                        <td data-label="Cliente">
-                          {t.nombre || '—'}
-                        </td>
-                        <td className="telefono-cell" data-label="Teléfono">
-                          {t.telefono ? (
-                            <a href={`tel:${t.telefono}`} className="telefono-link">
-                              📞 {t.telefono}
-                            </a>
-                          ) : '—'}
-                        </td>
-                        <td data-label="Confirmado">
-                          <input
-                            type="checkbox"
-                            checked={t.confirmado}
-                            onChange={() => handleConfirmar(t)}
-                            className="checkbox-confirm"
-                          />
-                        </td>
-                        <td data-label="Habilitado">
-                          <input
-                            type="checkbox"
-                            checked={t.habilitado}
-                            onChange={() => handleToggleHabilitar(t.id)}
-                            className="checkbox-habilitar"
-                          />
-                        </td>
-                        <td data-label="Acciones">
-                          {t.nombre && (
-                            <button className="btn-cancelar" onClick={() => handleCancelar(t)}>
-                              🗑️
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+
+              {/* CONTENIDO EXPANDIBLE */}
+              {isExpanded && (
+                <div className="day-content">
+                  <div className="turnos-table-container">
+                    <table className="turnos-table">
+                      <thead>
+                        <tr>
+                          <th>Horario</th>
+                          <th>Cliente</th>
+                          <th>Teléfono</th>
+                          <th>Confirmado</th>
+                          <th>Habilitado</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {turnosDelDia.map(t => (
+                          <tr 
+                            key={t.id} 
+                            className={`
+                              ${t.nombre ? 'reservado' : ''} 
+                              ${t.confirmado ? 'confirmado-row' : ''}
+                              ${t.nombre && !t.confirmado ? 'pendiente-row' : ''}
+                              ${!t.nombre && !t.telefono ? 'incomplete-row' : ''}
+                            `}
+                          >
+                            <td className="horario-cell" data-label="Horario">
+                              {t.horario}
+                            </td>
+                            <td data-label="Cliente">
+                              {t.nombre || <span className="empty-text">—</span>}
+                            </td>
+                            <td className="telefono-cell" data-label="Teléfono">
+                              {t.telefono ? (
+                                <a href={`tel:${t.telefono}`} className="telefono-link">
+                                  📞 {t.telefono}
+                                </a>
+                              ) : <span className="empty-text">—</span>}
+                            </td>
+                            <td data-label="Confirmado">
+                              <input
+                                type="checkbox"
+                                checked={t.confirmado}
+                                onChange={() => handleConfirmar(t)}
+                                className="checkbox-confirm"
+                                title={!t.nombre || !t.telefono ? 'Falta info del cliente' : ''}
+                              />
+                            </td>
+                            <td data-label="Habilitado">
+                              <input
+                                type="checkbox"
+                                checked={t.habilitado}
+                                onChange={() => handleToggleHabilitar(t.id)}
+                                className="checkbox-habilitar"
+                              />
+                            </td>
+                            <td data-label="Acciones">
+                              {t.nombre && (
+                                <button className="btn-cancelar" onClick={() => handleCancelar(t)}>
+                                  🗑️
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })
@@ -528,6 +703,11 @@ export default function AdminPanel({ API_URL }) {
                   <circle cx="12" cy="12" r="10"/>
                   <line x1="15" y1="9" x2="9" y2="15"/>
                   <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              )}
+              {confirmModal.icon === 'confirm' && (
+                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5"/>
                 </svg>
               )}
             </div>
