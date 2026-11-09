@@ -8,8 +8,8 @@ const API_URL = import.meta.env.VITE_API_URL
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendientes, setPendientes] = useState(0);
 
-  // Al cargar la app, verificar si hay sesión guardada
   useEffect(() => {
     const savedUser = localStorage.getItem('barberAdmin');
     if (savedUser) {
@@ -23,9 +23,26 @@ function App() {
     setLoading(false);
   }, []);
 
+  // Polling para actualizar contador de pendientes en el header
+  useEffect(() => {
+    if (!user) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}?action=getTurnos`);
+        const data = await res.json();
+        const count = data.filter(t => t.nombre && !t.confirmado).length;
+        setPendientes(count);
+      } catch (e) {
+        console.error(e);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   const handleLogin = (userData) => {
     setUser(userData);
-    // Guardar sesión en localStorage
     localStorage.setItem('barberAdmin', JSON.stringify(userData));
   };
 
@@ -54,9 +71,16 @@ function App() {
           <h1>🛠️ Panel Admin</h1>
           <p className="user-email">{user.email}</p>
         </div>
-        <button onClick={handleLogout} className="btn-logout">
-          Salir
-        </button>
+        <div className="header-actions">
+          {pendientes > 0 && (
+            <span className="badge-pendientes-header">
+              ⏳ {pendientes}
+            </span>
+          )}
+          <button onClick={handleLogout} className="btn-logout">
+            Salir
+          </button>
+        </div>
       </header>
 
       <AdminPanel API_URL={API_URL} />

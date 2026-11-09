@@ -1168,3 +1168,227 @@ body {
   color: #666;
   font-style: italic;
 }
+
+/* ═══════════════════════════════════════════
+   LOADING APP
+   ═══════════════════════════════════════════ */
+.loading-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a0a0e 0%, #0d0d0d 100%);
+  color: #fff;
+  gap: 20px;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #2a2a3e;
+  border-top: 4px solid #e94560;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-app p {
+  color: #888;
+  font-size: 1rem;
+}
+
+.login-hint {
+  margin-top: 20px;
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════
+   TOAST DE NOTIFICACIÓN
+   ═══════════════════════════════════════════ */
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #4caf50;
+  border-radius: 15px;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 10px 40px rgba(76, 175, 80, 0.4);
+  z-index: 2000;
+  cursor: pointer;
+  animation: slideInRight 0.5s ease-out, pulse-border 2s infinite;
+  max-width: 380px;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 10px 40px rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 10px 40px rgba(76, 175, 80, 0.7); }
+}
+
+.toast-icon {
+  width: 50px;
+  height: 50px;
+  background: rgba(76, 175, 80, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  animation: scaleIn 0.6s ease-out;
+}
+
+.toast-content {
+  flex: 1;
+}
+
+.toast-content h4 {
+  color: #4caf50;
+  font-size: 1rem;
+  margin-bottom: 5px;
+}
+
+.toast-content p {
+  color: #fff;
+  font-size: 0.85rem;
+  margin: 2px 0;
+}
+
+.toast-content p strong {
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+  transition: color 0.3s;
+}
+
+.toast-close:hover {
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════
+   CONTROLES DE NOTIFICACIÓN
+   ═══════════════════════════════════════════ */
+.notification-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 100;
+}
+
+.control-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #1a1a2e;
+  border: 2px solid #2a2a3e;
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover {
+  transform: scale(1.1);
+  border-color: #e94560;
+}
+
+.control-btn.active {
+  border-color: #4caf50;
+  box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+}
+
+/* ═══════════════════════════════════════════
+   BADGE EN HEADER
+   ═══════════════════════════════════════════ */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.badge-pendientes-header {
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 152, 0, 0); }
+}
+
+/* RESPONSIVE TOAST */
+@media (max-width: 600px) {
+  .toast-notification {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+    padding: 12px 15px;
+  }
+  
+  .toast-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .toast-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .toast-content h4 {
+    font-size: 0.9rem;
+  }
+  
+  .toast-content p {
+    font-size: 0.8rem;
+  }
+  
+  .notification-controls {
+    bottom: 10px;
+    right: 10px;
+  }
+  
+  .control-btn {
+    width: 45px;
+    height: 45px;
+    font-size: 1.1rem;
+  }
+}

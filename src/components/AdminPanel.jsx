@@ -10,8 +10,14 @@ export default function AdminPanel({ API_URL }) {
   const [successModal, setSuccessModal] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [weeks, setWeeks] = useState([]);
-  const [expandedDays, setExpandedDays] = useState({}); // { '2026-11-06': true }
+  const [expandedDays, setExpandedDays] = useState({});
   const [searchDate, setSearchDate] = useState('');
+  
+  // Estados para notificaciones
+  const [lastTurnosCount, setLastTurnosCount] = useState(0);
+  const [newReservationToast, setNewReservationToast] = useState(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
     fetchTurnos();
@@ -22,7 +28,39 @@ export default function AdminPanel({ API_URL }) {
     generateWeeks();
   }, [turnos, weekOffset]);
 
+  // POLLING: Consultar turnos cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchTurnosSilent();
+    }, 30000); // cada 30 segundos
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Detectar nuevos turnos
+  useEffect(() => {
+    if (turnos.length > lastTurnosCount && lastTurnosCount > 0) {
+      const nuevosTurnos = turnos.slice(lastTurnosCount);
+      const ultimoTurno = nuevosTurnos[nuevosTurnos.length - 1];
+      
+      if (ultimoTurno && ultimoTurno.nombre) {
+        mostrarNotificacion(ultimoTurno);
+      }
+    }
+    setLastTurnosCount(turnos.length);
+  }, [turnos]);
+
   const fetchTurnos = async () => {
+    try {
+      const res = await fetch(`${API_URL}?action=getTurnos`);
+      const data = await res.json();
+      setTurnos(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchTurnosSilent = async () => {
     try {
       const res = await fetch(`${API_URL}?action=getTurnos`);
       const data = await res.json();
@@ -59,7 +97,6 @@ export default function AdminPanel({ API_URL }) {
     setWeeks(weeksArray);
   };
 
-  // Toggle expandir/colapsar día
   const toggleDay = (fecha) => {
     setExpandedDays(prev => ({
       ...prev,
@@ -67,7 +104,6 @@ export default function AdminPanel({ API_URL }) {
     }));
   };
 
-  // Expandir todos los días de la semana actual
   const expandAllWeek = () => {
     const currentWeekFechas = weeks[weekOffset] || [];
     const newExpanded = { ...expandedDays };
@@ -75,32 +111,83 @@ export default function AdminPanel({ API_URL }) {
     setExpandedDays(newExpanded);
   };
 
-  // Colapsar todos
   const collapseAll = () => {
     setExpandedDays({});
   };
 
-  // Ir a una fecha específica
   const goToDate = (fecha) => {
     setSearchDate(fecha);
-    // Buscar en qué semana está esa fecha
     for (let i = 0; i < weeks.length; i++) {
       if (weeks[i].includes(fecha)) {
         setWeekOffset(i);
-        // Auto-expandir ese día
         setExpandedDays(prev => ({ ...prev, [fecha]: true }));
         break;
       }
     }
   };
 
-  // Estadísticas
   const stats = {
     total: turnos.length,
     reservados: turnos.filter(t => t.nombre).length,
     pendientes: turnos.filter(t => t.nombre && !t.confirmado).length,
     confirmados: turnos.filter(t => t.confirmado).length,
     libres: turnos.filter(t => !t.nombre && t.habilitado).length
+  };
+
+  const mostrarNotificacion = (turno) => {
+    if (!notificationsEnabled) return;
+    
+    const dayName = getDayName(turno.fecha);
+    const dateFormatted = formatDate(turno.fecha);
+    
+    setNewReservationToast({
+      nombre: turno.nombre,
+      telefono: turno.telefono,
+      fecha: `${dayName} ${dateFormatted}`,
+      horario: turno.horario
+    });
+
+    if (soundEnabled) {
+      playNotificationSound();
+    }
+
+    setTimeout(() => {
+      setNewReservationToast(null);
+    }, 8000);
+  };
+
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+      
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.frequency.value = 1000;
+        gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        osc2.start(audioContext.currentTime);
+        osc2.stop(audioContext.currentTime + 0.5);
+      }, 200);
+    } catch (e) {
+      console.log('No se pudo reproducir sonido');
+    }
   };
 
   const handleGenerar = async () => {
@@ -166,15 +253,12 @@ export default function AdminPanel({ API_URL }) {
     });
   };
 
-  // VALIDACIÓN: No confirmar si no hay info del cliente
   const handleConfirmar = (turno) => {
-    // Si ya está confirmado, lo desconfirmamos sin validar
     if (turno.confirmado) {
       confirmarTurnoAPI(turno);
       return;
     }
 
-    // Si no está confirmado, validar que tenga info del cliente
     if (!turno.nombre || !turno.telefono) {
       setSuccessModal({
         title: '⚠️ Información incompleta',
@@ -296,7 +380,7 @@ export default function AdminPanel({ API_URL }) {
     });
   };
 
-  // PERSONALIZAR MENSAJE DE WHATSAPP
+// MENSAJE DE CONFIRMACIÓN POR WHATSAPP
   const getWhatsAppMessage = (turno) => {
   const dayName = getDayName(turno.fecha);
   const dateFormatted = formatDate(turno.fecha);
@@ -309,10 +393,16 @@ export default function AdminPanel({ API_URL }) {
 🕐 *${turno.horario} hs*
 💈 *Corte de pelo*
 
+📍 Av. Siempre Viva 123
 📱 Si necesitás cambiar el turno, respondé este mensaje.
 
 ¡Gracias por elegirnos! ✂️`;
 };
+  const normalizePhoneForWhatsApp = (phone) => {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length <= 10) return `54${cleaned}`;
+    return cleaned;
+  };
 
   const handleWhatsApp = () => {
     if (!contactModal) return;
@@ -376,7 +466,7 @@ export default function AdminPanel({ API_URL }) {
     const newOffset = weekOffset + direction;
     if (newOffset >= 0 && newOffset < weeks.length) {
       setWeekOffset(newOffset);
-      setExpandedDays({}); // Colapsar al cambiar de semana
+      setExpandedDays({});
     }
   };
 
@@ -384,7 +474,6 @@ export default function AdminPanel({ API_URL }) {
   const turnosDeLaSemana = turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha));
   const gruposSemana = agruparPorFecha(turnosDeLaSemana);
 
-  // Obtener info resumida de un día
   const getDaySummary = (fecha) => {
     const turnosDelDia = turnos.filter(t => t.fecha === fecha);
     const reservados = turnosDelDia.filter(t => t.nombre).length;
@@ -395,7 +484,7 @@ export default function AdminPanel({ API_URL }) {
 
   return (
     <div className="admin-panel">
-      {/* ESTADÍSTICAS RÁPIDAS */}
+      {/* ESTADÍSTICAS */}
       <div className="stats-bar">
         <div className="stat-card stat-total">
           <span className="stat-number">{stats.total}</span>
@@ -527,7 +616,7 @@ export default function AdminPanel({ API_URL }) {
         </div>
       )}
 
-      {/* DÍAS COMO ACORDEÓN */}
+      {/* DÍAS ACORDEÓN */}
       {currentWeekFechas.length === 0 ? (
         <p className="no-turnos">No hay turnos para mostrar</p>
       ) : (
@@ -541,7 +630,6 @@ export default function AdminPanel({ API_URL }) {
 
           return (
             <div key={fecha} className={`day-accordion ${isExpanded ? 'expanded' : ''} ${hasPendientes ? 'has-pendientes' : ''}`}>
-              {/* HEADER DEL DÍA (clickable) */}
               <div className="day-header" onClick={() => toggleDay(fecha)}>
                 <div className="day-header-left">
                   <svg 
@@ -575,7 +663,6 @@ export default function AdminPanel({ API_URL }) {
                 </button>
               </div>
 
-              {/* CONTENIDO EXPANDIBLE */}
               {isExpanded && (
                 <div className="day-content">
                   <div className="turnos-table-container">
@@ -649,6 +736,47 @@ export default function AdminPanel({ API_URL }) {
           );
         })
       )}
+
+      {/* TOAST DE NUEVA RESERVA */}
+      {newReservationToast && (
+        <div className="toast-notification" onClick={() => setNewReservationToast(null)}>
+          <div className="toast-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+          </div>
+          <div className="toast-content">
+            <h4>¡Nueva Reserva! 🎉</h4>
+            <p><strong>{newReservationToast.nombre}</strong></p>
+            <p>📞 {newReservationToast.telefono}</p>
+            <p>📅 {newReservationToast.fecha} a las {newReservationToast.horario}</p>
+          </div>
+          <button className="toast-close" onClick={(e) => {
+            e.stopPropagation();
+            setNewReservationToast(null);
+          }}>
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* CONTROLES DE NOTIFICACIÓN */}
+      <div className="notification-controls">
+        <button 
+          className={`control-btn ${notificationsEnabled ? 'active' : ''}`}
+          onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+          title={notificationsEnabled ? 'Silenciar notificaciones' : 'Activar notificaciones'}
+        >
+          {notificationsEnabled ? '🔔' : '🔕'}
+        </button>
+        <button 
+          className={`control-btn ${soundEnabled ? 'active' : ''}`}
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          title={soundEnabled ? 'Silenciar sonido' : 'Activar sonido'}
+        >
+          {soundEnabled ? '🔊' : '🔇'}
+        </button>
+      </div>
 
       {/* MODAL DE ÉXITO / ERROR */}
       {successModal && (
