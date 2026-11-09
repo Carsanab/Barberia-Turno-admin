@@ -296,17 +296,23 @@ export default function AdminPanel({ API_URL }) {
     });
   };
 
+  // PERSONALIZAR MENSAJE DE WHATSAPP
   const getWhatsAppMessage = (turno) => {
-    const dayName = getDayName(turno.fecha);
-    const dateFormatted = formatDate(turno.fecha);
-    return `Hola ${turno.nombre}! 👋\n\nTe confirmamos tu turno en *The Barber Cut* ✂️\n\n📅 ${dayName} ${dateFormatted}\n🕐 ${turno.horario}\n\n¡Te esperamos!`;
-  };
+  const dayName = getDayName(turno.fecha);
+  const dateFormatted = formatDate(turno.fecha);
+  
+  return `Hola *${turno.nombre}*! 👋
 
-  const normalizePhoneForWhatsApp = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length <= 10) return `54${cleaned}`;
-    return cleaned;
-  };
+✅ Tu turno fue confirmado.
+
+📅 *${dayName} ${dateFormatted}*
+🕐 *${turno.horario} hs*
+💈 *Corte de pelo*
+
+📱 Si necesitás cambiar el turno, respondé este mensaje.
+
+¡Gracias por elegirnos! ✂️`;
+};
 
   const handleWhatsApp = () => {
     if (!contactModal) return;

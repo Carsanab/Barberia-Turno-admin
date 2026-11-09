@@ -56,6 +56,10 @@ export default function Login({ API_URL, onLogin }) {
             {loading ? 'Verificando...' : 'Ingresar'}
           </button>
         </form>
+
+        <p className="login-hint">
+          Tu sesión se guardará automáticamente
+        </p>
       </div>
     </div>
   );
