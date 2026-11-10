@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 
 export default function AdminPanel({ API_URL }) {
   const [turnos, setTurnos] = useState([]);
+  const [barberos, setBarberos] = useState([]);
+  const [selectedBarberFilter, setSelectedBarberFilter] = useState('todos');
   const [config, setConfig] = useState({ fechaHasta: '', diasHabilitados: '' });
   const [filter, setFilter] = useState('todos');
   const [loading, setLoading] = useState(false);
@@ -12,8 +14,6 @@ export default function AdminPanel({ API_URL }) {
   const [weeks, setWeeks] = useState([]);
   const [expandedDays, setExpandedDays] = useState({});
   const [searchDate, setSearchDate] = useState('');
-  
-  // Estados para notificaciones
   const [lastTurnosCount, setLastTurnosCount] = useState(0);
   const [newReservationToast, setNewReservationToast] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -22,27 +22,24 @@ export default function AdminPanel({ API_URL }) {
   useEffect(() => {
     fetchTurnos();
     fetchConfig();
+    fetchBarberos();
   }, []);
 
   useEffect(() => {
     generateWeeks();
   }, [turnos, weekOffset]);
 
-  // POLLING: Consultar turnos cada 30 segundos
   useEffect(() => {
     const interval = setInterval(() => {
       fetchTurnosSilent();
-    }, 30000); // cada 30 segundos
-
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Detectar nuevos turnos
   useEffect(() => {
     if (turnos.length > lastTurnosCount && lastTurnosCount > 0) {
       const nuevosTurnos = turnos.slice(lastTurnosCount);
       const ultimoTurno = nuevosTurnos[nuevosTurnos.length - 1];
-      
       if (ultimoTurno && ultimoTurno.nombre) {
         mostrarNotificacion(ultimoTurno);
       }
@@ -54,7 +51,7 @@ export default function AdminPanel({ API_URL }) {
     try {
       const res = await fetch(`${API_URL}?action=getTurnos`);
       const data = await res.json();
-      setTurnos(data);
+      setTurnos(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
     }
@@ -64,7 +61,7 @@ export default function AdminPanel({ API_URL }) {
     try {
       const res = await fetch(`${API_URL}?action=getTurnos`);
       const data = await res.json();
-      setTurnos(data);
+      setTurnos(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
     }
@@ -83,12 +80,21 @@ export default function AdminPanel({ API_URL }) {
     }
   };
 
+  const fetchBarberos = async () => {
+    try {
+      const res = await fetch(`${API_URL}?action=getBarberos`);
+      const data = await res.json();
+      setBarberos(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const generateWeeks = () => {
     if (turnos.length === 0) {
       setWeeks([]);
       return;
     }
-
     const fechasUnicas = [...new Set(turnos.map(t => t.fecha))].sort();
     const weeksArray = [];
     for (let i = 0; i < fechasUnicas.length; i += 7) {
@@ -98,10 +104,7 @@ export default function AdminPanel({ API_URL }) {
   };
 
   const toggleDay = (fecha) => {
-    setExpandedDays(prev => ({
-      ...prev,
-      [fecha]: !prev[fecha]
-    }));
+    setExpandedDays(prev => ({ ...prev, [fecha]: !prev[fecha] }));
   };
 
   const expandAllWeek = () => {
@@ -136,24 +139,17 @@ export default function AdminPanel({ API_URL }) {
 
   const mostrarNotificacion = (turno) => {
     if (!notificationsEnabled) return;
-    
     const dayName = getDayName(turno.fecha);
     const dateFormatted = formatDate(turno.fecha);
-    
     setNewReservationToast({
       nombre: turno.nombre,
       telefono: turno.telefono,
       fecha: `${dayName} ${dateFormatted}`,
-      horario: turno.horario
+      horario: turno.horario,
+      barbero: turno.barbero
     });
-
-    if (soundEnabled) {
-      playNotificationSound();
-    }
-
-    setTimeout(() => {
-      setNewReservationToast(null);
-    }, 8000);
+    if (soundEnabled) playNotificationSound();
+    setTimeout(() => setNewReservationToast(null), 8000);
   };
 
   const playNotificationSound = () => {
@@ -161,19 +157,14 @@ export default function AdminPanel({ API_URL }) {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
       oscillator.frequency.value = 800;
       oscillator.type = 'sine';
-      
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-      
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.5);
-      
       setTimeout(() => {
         const osc2 = audioContext.createOscillator();
         const gain2 = audioContext.createGain();
@@ -192,61 +183,28 @@ export default function AdminPanel({ API_URL }) {
 
   const handleGenerar = async () => {
     if (!config.fechaHasta || !config.diasHabilitados) {
-      setSuccessModal({
-        title: '⚠️ Campos incompletos',
-        message: 'Completá fecha hasta y días habilitados antes de generar.',
-        icon: 'warning'
-      });
+      setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá fecha hasta y días habilitados.', icon: 'warning' });
       return;
     }
-
     setConfirmModal({
       title: '⚠️ Generar Turnos',
-      message: 'Esto borrará TODOS los turnos existentes y generará nuevos. ¿Continuar?',
+      message: 'Esto borrará TODOS los turnos existentes y generará nuevos para cada barbero activo. ¿Continuar?',
       icon: 'warning',
       onConfirm: async () => {
         setLoading(true);
         setConfirmModal(null);
         try {
-          await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-              action: 'updateConfig',
-              fechaHasta: config.fechaHasta,
-              diasHabilitados: config.diasHabilitados
-            })
-          });
-
-          const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-              action: 'generarDesdeConfig',
-              fechaHasta: config.fechaHasta,
-              diasHabilitados: config.diasHabilitados
-            })
-          });
+          await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
+          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'generarDesdeConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
           const data = await res.json();
-          
           if (data.success) {
-            setSuccessModal({
-              title: '✅ Proceso Completado',
-              message: data.message || 'Los turnos se generaron correctamente.',
-              icon: 'success'
-            });
+            setSuccessModal({ title: '✅ Proceso Completado', message: data.message, icon: 'success' });
             fetchTurnos();
           } else {
-            setSuccessModal({
-              title: '❌ Error',
-              message: data.error || 'Ocurrió un error al generar los turnos.',
-              icon: 'error'
-            });
+            setSuccessModal({ title: '❌ Error', message: data.error, icon: 'error' });
           }
         } catch (e) {
-          setSuccessModal({
-            title: '❌ Error de conexión',
-            message: 'No se pudo conectar con el servidor.',
-            icon: 'error'
-          });
+          setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar.', icon: 'error' });
         }
         setLoading(false);
       }
@@ -258,19 +216,13 @@ export default function AdminPanel({ API_URL }) {
       confirmarTurnoAPI(turno);
       return;
     }
-
     if (!turno.nombre || !turno.telefono) {
-      setSuccessModal({
-        title: '⚠️ Información incompleta',
-        message: `No se puede confirmar el turno de las ${turno.horario} porque falta información del cliente (nombre y teléfono).`,
-        icon: 'warning'
-      });
+      setSuccessModal({ title: '⚠️ Información incompleta', message: `No se puede confirmar el turno de las ${turno.horario} (${turno.barbero}) porque falta información del cliente.`, icon: 'warning' });
       return;
     }
-
     setConfirmModal({
       title: '✅ Confirmar Turno',
-      message: `¿Confirmar el turno de ${turno.nombre} (${turno.telefono}) del ${formatDate(turno.fecha)} a las ${turno.horario}?`,
+      message: `¿Confirmar el turno de ${turno.nombre} (${turno.telefono}) con ${turno.barbero} el ${formatDate(turno.fecha)} a las ${turno.horario}?`,
       icon: 'confirm',
       onConfirm: async () => {
         setConfirmModal(null);
@@ -281,16 +233,10 @@ export default function AdminPanel({ API_URL }) {
 
   const confirmarTurnoAPI = async (turno) => {
     try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'confirmar', id: turno.id })
-      });
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmar', id: turno.id }) });
       const data = await res.json();
-      
       if (data.success) {
-        if (data.confirmado) {
-          setContactModal({ turno, confirmado: true });
-        }
+        if (data.confirmado) setContactModal({ turno, confirmado: true });
         fetchTurnos();
       }
     } catch (e) {
@@ -300,10 +246,7 @@ export default function AdminPanel({ API_URL }) {
 
   const handleToggleHabilitar = async (id) => {
     try {
-      await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'toggleHabilitar', id })
-      });
+      await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'toggleHabilitar', id }) });
       fetchTurnos();
     } catch (e) {
       console.error(e);
@@ -313,27 +256,16 @@ export default function AdminPanel({ API_URL }) {
   const handleCancelar = (turno) => {
     setConfirmModal({
       title: '🗑️ Cancelar Reserva',
-      message: `¿Cancelar la reserva de ${turno.nombre} del ${formatDate(turno.fecha)} a las ${turno.horario}?`,
+      message: `¿Cancelar la reserva de ${turno.nombre} con ${turno.barbero} el ${formatDate(turno.fecha)} a las ${turno.horario}?`,
       icon: 'delete',
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'cancelar', id: turno.id })
-          });
-          setSuccessModal({
-            title: '✅ Proceso Completado',
-            message: `La reserva de ${turno.nombre} fue cancelada correctamente.`,
-            icon: 'success'
-          });
+          await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelar', id: turno.id }) });
+          setSuccessModal({ title: '✅ Proceso Completado', message: `La reserva de ${turno.nombre} fue cancelada.`, icon: 'success' });
           fetchTurnos();
         } catch (e) {
-          setSuccessModal({
-            title: '❌ Error',
-            message: 'No se pudo cancelar la reserva.',
-            icon: 'error'
-          });
+          setSuccessModal({ title: '❌ Error', message: 'No se pudo cancelar.', icon: 'error' });
         }
       }
     });
@@ -342,62 +274,34 @@ export default function AdminPanel({ API_URL }) {
   const handleEliminarDia = (fecha) => {
     const turnosDelDia = turnos.filter(t => t.fecha === fecha);
     const reservados = turnosDelDia.filter(t => t.nombre).length;
-    
     setConfirmModal({
       title: '🗑️ Eliminar Día Completo',
-      message: `Se eliminarán ${turnosDelDia.length} turnos (${reservados} reservados) del ${formatDate(fecha)}. Esta acción no se puede deshacer.`,
+      message: `Se eliminarán ${turnosDelDia.length} turnos (${reservados} reservados) del ${formatDate(fecha)}.`,
       icon: 'danger',
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'eliminarDia', fecha })
-          });
+          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'eliminarDia', fecha }) });
           const data = await res.json();
           if (data.success) {
-            setSuccessModal({
-              title: '✅ Proceso Completado',
-              message: `Se eliminaron ${data.eliminados} turnos del ${formatDate(fecha)} correctamente.`,
-              icon: 'success'
-            });
+            setSuccessModal({ title: '✅ Proceso Completado', message: `Se eliminaron ${data.eliminados} turnos del ${formatDate(fecha)}.`, icon: 'success' });
             fetchTurnos();
           } else {
-            setSuccessModal({
-              title: '❌ Error',
-              message: data.error || 'No se pudo eliminar el día.',
-              icon: 'error'
-            });
+            setSuccessModal({ title: '❌ Error', message: data.error, icon: 'error' });
           }
         } catch (e) {
-          setSuccessModal({
-            title: '❌ Error de conexión',
-            message: 'No se pudo conectar con el servidor.',
-            icon: 'error'
-          });
+          setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar.', icon: 'error' });
         }
       }
     });
   };
 
-// MENSAJE DE CONFIRMACIÓN POR WHATSAPP
   const getWhatsAppMessage = (turno) => {
-  const dayName = getDayName(turno.fecha);
-  const dateFormatted = formatDate(turno.fecha);
-  
-  return `Hola *${turno.nombre}*! 👋
+    const dayName = getDayName(turno.fecha);
+    const dateFormatted = formatDate(turno.fecha);
+    return `Hola ${turno.nombre}! 👋\n\nTe confirmamos tu turno en *The Barber Cut* ✂️\n\n👨‍🎨 Barbero: ${turno.barbero}\n💇 Servicio: ${turno.servicio || 'No especificado'}\n📅 ${dayName} ${dateFormatted}\n🕐 ${turno.horario}\n\n¡Te esperamos!`;
+  };
 
-✅ Tu turno fue confirmado.
-
-📅 *${dayName} ${dateFormatted}*
-🕐 *${turno.horario} hs*
-💈 *Corte de pelo*
-
-📍 Av. Siempre Viva 123
-📱 Si necesitás cambiar el turno, respondé este mensaje.
-
-¡Gracias por elegirnos! ✂️`;
-};
   const normalizePhoneForWhatsApp = (phone) => {
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length <= 10) return `54${cleaned}`;
@@ -419,6 +323,7 @@ export default function AdminPanel({ API_URL }) {
   };
 
   const turnosFiltrados = turnos.filter(t => {
+    if (selectedBarberFilter !== 'todos' && t.barbero !== selectedBarberFilter) return false;
     if (filter === 'confirmados') return t.confirmado;
     if (filter === 'pendientes') return t.nombre && !t.confirmado;
     if (filter === 'reservados') return t.nombre;
@@ -520,85 +425,67 @@ export default function AdminPanel({ API_URL }) {
       {/* CONFIGURACIÓN */}
       <div className="config-section">
         <h3>⚙️ Generar Turnos</h3>
-        
         <div className="config-row">
-          <label>
-            Fecha hasta:
-            <input
-              type="date"
-              value={config.fechaHasta}
-              onChange={e => setConfig({ ...config, fechaHasta: e.target.value })}
-            />
+          <label>Fecha hasta:
+            <input type="date" value={config.fechaHasta} onChange={e => setConfig({ ...config, fechaHasta: e.target.value })} />
           </label>
         </div>
-
         <div className="config-row">
           <label>Días habilitados:</label>
           <div className="dias-checks">
             {diasSemana.map(d => (
               <label key={d.v} className="dia-check">
-                <input
-                  type="checkbox"
-                  checked={config.diasHabilitados.split(',').map(Number).includes(d.v)}
-                  onChange={() => {
-                    const arr = config.diasHabilitados.split(',').map(Number);
-                    if (arr.includes(d.v)) {
-                      setConfig({ ...config, diasHabilitados: arr.filter(x => x !== d.v).join(',') });
-                    } else {
-                      arr.push(d.v);
-                      setConfig({ ...config, diasHabilitados: arr.sort().join(',') });
-                    }
-                  }}
-                />
+                <input type="checkbox" checked={config.diasHabilitados.split(',').map(Number).includes(d.v)} onChange={() => {
+                  const arr = config.diasHabilitados.split(',').map(Number);
+                  if (arr.includes(d.v)) setConfig({ ...config, diasHabilitados: arr.filter(x => x !== d.v).join(',') });
+                  else { arr.push(d.v); setConfig({ ...config, diasHabilitados: arr.sort().join(',') }); }
+                }} />
                 {d.l}
               </label>
             ))}
           </div>
         </div>
-
         <button className="btn-generar" onClick={handleGenerar} disabled={loading}>
           {loading ? 'Generando...' : '🔄 Generar Turnos'}
         </button>
       </div>
 
-      {/* BUSCADOR DE FECHA */}
-      <div className="search-section">
-        <label>🔍 Ir a fecha específica:</label>
-        <input
-          type="date"
-          value={searchDate}
-          min={new Date().toISOString().split('T')[0]}
-          onChange={e => {
-            setSearchDate(e.target.value);
-            if (e.target.value) goToDate(e.target.value);
-          }}
-          className="search-date-input"
-        />
-      </div>
+      {/* FILTRO POR BARBERO */}
+      {barberos.length > 0 && (
+        <div className="barber-filter-section">
+          <label>👨‍🎨 Filtrar por barbero:</label>
+          <div className="barber-filter-buttons">
+            <button className={`barber-filter-btn ${selectedBarberFilter === 'todos' ? 'active' : ''}`} onClick={() => setSelectedBarberFilter('todos')}>
+              Todos
+            </button>
+            {barberos.map(b => (
+              <button key={b.id} className={`barber-filter-btn ${selectedBarberFilter === b.nombre ? 'active' : ''}`} onClick={() => setSelectedBarberFilter(b.nombre)}>
+                {b.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* FILTROS */}
       <div className="filters">
         {['todos', 'reservados', 'pendientes', 'confirmados', 'libres'].map(f => (
-          <button
-            key={f}
-            className={filter === f ? 'active' : ''}
-            onClick={() => setFilter(f)}
-          >
+          <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
             {f.charAt(0).toUpperCase() + f.slice(1)} ({f === 'todos' ? turnos.length : turnosFiltrados.length})
           </button>
         ))}
       </div>
 
+      {/* BUSCADOR DE FECHA */}
+      <div className="search-section">
+        <label>🔍 Ir a fecha específica:</label>
+        <input type="date" value={searchDate} min={new Date().toISOString().split('T')[0]} onChange={e => { setSearchDate(e.target.value); if (e.target.value) goToDate(e.target.value); }} className="search-date-input" />
+      </div>
+
       {/* NAVEGACIÓN DE SEMANAS */}
       {weeks.length > 0 && (
         <div className="week-nav-admin">
-          <button 
-            className="week-nav-btn" 
-            onClick={() => handleWeekChange(-1)}
-            disabled={weekOffset === 0}
-          >
-            ← Anterior
-          </button>
+          <button className="week-nav-btn" onClick={() => handleWeekChange(-1)} disabled={weekOffset === 0}>← Anterior</button>
           <div className="week-actions">
             <span className="week-label">Semana {weekOffset + 1} de {weeks.length}</span>
             <div className="week-buttons">
@@ -606,13 +493,7 @@ export default function AdminPanel({ API_URL }) {
               <button className="btn-small" onClick={collapseAll}>Colapsar todo</button>
             </div>
           </div>
-          <button 
-            className="week-nav-btn" 
-            onClick={() => handleWeekChange(1)}
-            disabled={weekOffset >= weeks.length - 1}
-          >
-            Siguiente →
-          </button>
+          <button className="week-nav-btn" onClick={() => handleWeekChange(1)} disabled={weekOffset >= weeks.length - 1}>Siguiente →</button>
         </div>
       )}
 
@@ -623,46 +504,28 @@ export default function AdminPanel({ API_URL }) {
         currentWeekFechas.map(fecha => {
           const turnosDelDia = gruposSemana[fecha] || [];
           if (turnosDelDia.length === 0) return null;
-          
           const summary = getDaySummary(fecha);
           const isExpanded = expandedDays[fecha] || false;
           const hasPendientes = summary.pendientes > 0;
-
           return (
             <div key={fecha} className={`day-accordion ${isExpanded ? 'expanded' : ''} ${hasPendientes ? 'has-pendientes' : ''}`}>
               <div className="day-header" onClick={() => toggleDay(fecha)}>
                 <div className="day-header-left">
-                  <svg 
-                    className={`chevron ${isExpanded ? 'rotated' : ''}`}
-                    width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                  >
+                  <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polyline points="6 9 12 15 18 9"/>
                   </svg>
                   <div className="day-title">
                     <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
                     <div className="day-badges">
                       <span className="badge badge-total">{summary.total} turnos</span>
-                      {summary.reservados > 0 && (
-                        <span className="badge badge-reservados">{summary.reservados} reservados</span>
-                      )}
-                      {summary.confirmados > 0 && (
-                        <span className="badge badge-confirmados">{summary.confirmados} confirmados</span>
-                      )}
-                      {hasPendientes && (
-                        <span className="badge badge-pendientes">⏳ {summary.pendientes} pendientes</span>
-                      )}
+                      {summary.reservados > 0 && <span className="badge badge-reservados">{summary.reservados} reservados</span>}
+                      {summary.confirmados > 0 && <span className="badge badge-confirmados">{summary.confirmados} confirmados</span>}
+                      {hasPendientes && <span className="badge badge-pendientes">⏳ {summary.pendientes} pendientes</span>}
                     </div>
                   </div>
                 </div>
-                <button 
-                  className="btn-eliminar-dia"
-                  onClick={(e) => { e.stopPropagation(); handleEliminarDia(fecha); }}
-                  title="Eliminar todos los turnos de este día"
-                >
-                  🗑️
-                </button>
+                <button className="btn-eliminar-dia" onClick={(e) => { e.stopPropagation(); handleEliminarDia(fecha); }}>🗑️</button>
               </div>
-
               {isExpanded && (
                 <div className="day-content">
                   <div className="turnos-table-container">
@@ -670,8 +533,10 @@ export default function AdminPanel({ API_URL }) {
                       <thead>
                         <tr>
                           <th>Horario</th>
+                          <th>Barbero</th>
                           <th>Cliente</th>
                           <th>Teléfono</th>
+                          <th>Servicio</th>
                           <th>Confirmado</th>
                           <th>Habilitado</th>
                           <th>Acciones</th>
@@ -679,52 +544,15 @@ export default function AdminPanel({ API_URL }) {
                       </thead>
                       <tbody>
                         {turnosDelDia.map(t => (
-                          <tr 
-                            key={t.id} 
-                            className={`
-                              ${t.nombre ? 'reservado' : ''} 
-                              ${t.confirmado ? 'confirmado-row' : ''}
-                              ${t.nombre && !t.confirmado ? 'pendiente-row' : ''}
-                              ${!t.nombre && !t.telefono ? 'incomplete-row' : ''}
-                            `}
-                          >
-                            <td className="horario-cell" data-label="Horario">
-                              {t.horario}
-                            </td>
-                            <td data-label="Cliente">
-                              {t.nombre || <span className="empty-text">—</span>}
-                            </td>
-                            <td className="telefono-cell" data-label="Teléfono">
-                              {t.telefono ? (
-                                <a href={`tel:${t.telefono}`} className="telefono-link">
-                                  📞 {t.telefono}
-                                </a>
-                              ) : <span className="empty-text">—</span>}
-                            </td>
-                            <td data-label="Confirmado">
-                              <input
-                                type="checkbox"
-                                checked={t.confirmado}
-                                onChange={() => handleConfirmar(t)}
-                                className="checkbox-confirm"
-                                title={!t.nombre || !t.telefono ? 'Falta info del cliente' : ''}
-                              />
-                            </td>
-                            <td data-label="Habilitado">
-                              <input
-                                type="checkbox"
-                                checked={t.habilitado}
-                                onChange={() => handleToggleHabilitar(t.id)}
-                                className="checkbox-habilitar"
-                              />
-                            </td>
-                            <td data-label="Acciones">
-                              {t.nombre && (
-                                <button className="btn-cancelar" onClick={() => handleCancelar(t)}>
-                                  🗑️
-                                </button>
-                              )}
-                            </td>
+                          <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''} ${t.nombre && !t.confirmado ? 'pendiente-row' : ''}`}>
+                            <td className="horario-cell" data-label="Horario">{t.horario}</td>
+                            <td data-label="Barbero"><span className="barber-tag">{t.barbero}</span></td>
+                            <td data-label="Cliente">{t.nombre || <span className="empty-text">—</span>}</td>
+                            <td className="telefono-cell" data-label="Teléfono">{t.telefono ? <a href={`tel:${t.telefono}`} className="telefono-link">📞 {t.telefono}</a> : <span className="empty-text">—</span>}</td>
+                            <td data-label="Servicio">{t.servicio || <span className="empty-text">—</span>}</td>
+                            <td data-label="Confirmado"><input type="checkbox" checked={t.confirmado} onChange={() => handleConfirmar(t)} className="checkbox-confirm" title={!t.nombre || !t.telefono ? 'Falta info del cliente' : ''} /></td>
+                            <td data-label="Habilitado"><input type="checkbox" checked={t.habilitado} onChange={() => handleToggleHabilitar(t.id)} className="checkbox-habilitar" /></td>
+                            <td data-label="Acciones">{t.nombre && <button className="btn-cancelar" onClick={() => handleCancelar(t)}>🗑️</button>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -748,169 +576,87 @@ export default function AdminPanel({ API_URL }) {
           <div className="toast-content">
             <h4>¡Nueva Reserva! 🎉</h4>
             <p><strong>{newReservationToast.nombre}</strong></p>
+            <p>👨‍🎨 {newReservationToast.barbero}</p>
             <p>📞 {newReservationToast.telefono}</p>
             <p>📅 {newReservationToast.fecha} a las {newReservationToast.horario}</p>
           </div>
-          <button className="toast-close" onClick={(e) => {
-            e.stopPropagation();
-            setNewReservationToast(null);
-          }}>
-            ✕
-          </button>
+          <button className="toast-close" onClick={(e) => { e.stopPropagation(); setNewReservationToast(null); }}>✕</button>
         </div>
       )}
 
       {/* CONTROLES DE NOTIFICACIÓN */}
       <div className="notification-controls">
-        <button 
-          className={`control-btn ${notificationsEnabled ? 'active' : ''}`}
-          onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-          title={notificationsEnabled ? 'Silenciar notificaciones' : 'Activar notificaciones'}
-        >
+        <button className={`control-btn ${notificationsEnabled ? 'active' : ''}`} onClick={() => setNotificationsEnabled(!notificationsEnabled)} title={notificationsEnabled ? 'Silenciar notificaciones' : 'Activar notificaciones'}>
           {notificationsEnabled ? '🔔' : '🔕'}
         </button>
-        <button 
-          className={`control-btn ${soundEnabled ? 'active' : ''}`}
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          title={soundEnabled ? 'Silenciar sonido' : 'Activar sonido'}
-        >
+        <button className={`control-btn ${soundEnabled ? 'active' : ''}`} onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? 'Silenciar sonido' : 'Activar sonido'}>
           {soundEnabled ? '🔊' : '🔇'}
         </button>
       </div>
 
-      {/* MODAL DE ÉXITO / ERROR */}
+      {/* MODALES */}
       {successModal && (
         <div className="modal-overlay" onClick={() => setSuccessModal(null)}>
           <div className="success-modal" onClick={e => e.stopPropagation()}>
             <div className={`success-icon-container ${successModal.icon}`}>
-              {successModal.icon === 'success' && (
-                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
-              )}
-              {successModal.icon === 'warning' && (
-                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2.5">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              )}
-              {successModal.icon === 'error' && (
-                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-              )}
+              {successModal.icon === 'success' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>}
+              {successModal.icon === 'warning' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
+              {successModal.icon === 'error' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
             </div>
             <h3>{successModal.title}</h3>
             <p className="success-message">{successModal.message}</p>
-            <button className="btn-success-close" onClick={() => setSuccessModal(null)}>
-              Entendido
-            </button>
+            <button className="btn-success-close" onClick={() => setSuccessModal(null)}>Entendido</button>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CONFIRMACIÓN */}
       {confirmModal && (
         <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
           <div className="confirm-modal" onClick={e => e.stopPropagation()}>
             <div className={`modal-icon-container ${confirmModal.icon}`}>
-              {confirmModal.icon === 'warning' && (
-                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              )}
-              {confirmModal.icon === 'delete' && (
-                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#e94560" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                  <line x1="10" y1="11" x2="10" y2="17"/>
-                  <line x1="14" y1="11" x2="14" y2="17"/>
-                </svg>
-              )}
-              {confirmModal.icon === 'danger' && (
-                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="15" y1="9" x2="9" y2="15"/>
-                  <line x1="9" y1="9" x2="15" y2="15"/>
-                </svg>
-              )}
-              {confirmModal.icon === 'confirm' && (
-                <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
-              )}
+              {confirmModal.icon === 'warning' && <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
+              {confirmModal.icon === 'delete' && <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#e94560" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>}
+              {confirmModal.icon === 'danger' && <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
+              {confirmModal.icon === 'confirm' && <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>}
             </div>
             <h3>{confirmModal.title}</h3>
             <p className="modal-message">{confirmModal.message}</p>
             <div className="modal-actions-confirm">
-              <button className="btn-modal-cancel" onClick={() => setConfirmModal(null)}>
-                Cancelar
-              </button>
-              <button 
-                className={`btn-modal-confirm ${confirmModal.icon}`} 
-                onClick={confirmModal.onConfirm}
-              >
-                Confirmar
-              </button>
+              <button className="btn-modal-cancel" onClick={() => setConfirmModal(null)}>Cancelar</button>
+              <button className={`btn-modal-confirm ${confirmModal.icon}`} onClick={confirmModal.onConfirm}>Confirmar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CONTACTO */}
       {contactModal && contactModal.confirmado && (
         <div className="modal-overlay" onClick={() => setContactModal(null)}>
           <div className="contact-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-icon-success">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
               </div>
               <h3>¡Turno Confirmado!</h3>
               <p className="modal-subtitle">¿Querés contactar al cliente?</p>
             </div>
-
             <div className="modal-client-info">
-              <div className="client-detail">
-                <span className="detail-label">👤 Cliente</span>
-                <span className="detail-value">{contactModal.turno.nombre}</span>
-              </div>
-              <div className="client-detail">
-                <span className="detail-label">📞 Teléfono</span>
-                <span className="detail-value">{contactModal.turno.telefono}</span>
-              </div>
-              <div className="client-detail">
-                <span className="detail-label">📅 Turno</span>
-                <span className="detail-value">
-                  {getDayName(contactModal.turno.fecha)} {formatDate(contactModal.turno.fecha)} a las {contactModal.turno.horario}
-                </span>
-              </div>
+              <div className="client-detail"><span className="detail-label">👤 Cliente</span><span className="detail-value">{contactModal.turno.nombre}</span></div>
+              <div className="client-detail"><span className="detail-label">📞 Teléfono</span><span className="detail-value">{contactModal.turno.telefono}</span></div>
+              <div className="client-detail"><span className="detail-label">👨‍🎨 Barbero</span><span className="detail-value">{contactModal.turno.barbero}</span></div>
+              <div className="client-detail"><span className="detail-label">💇 Servicio</span><span className="detail-value">{contactModal.turno.servicio || 'No especificado'}</span></div>
+              <div className="client-detail"><span className="detail-label">📅 Turno</span><span className="detail-value">{getDayName(contactModal.turno.fecha)} {formatDate(contactModal.turno.fecha)} a las {contactModal.turno.horario}</span></div>
             </div>
-
             <div className="modal-contact-actions">
               <button className="btn-whatsapp" onClick={handleWhatsApp}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                </svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
                 WhatsApp
               </button>
               <button className="btn-call" onClick={handleCall}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
-                </svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
                 Llamar
               </button>
             </div>
-
-            <button className="btn-close-modal" onClick={() => setContactModal(null)}>
-              Cerrar
-            </button>
+            <button className="btn-close-modal" onClick={() => setContactModal(null)}>Cerrar</button>
           </div>
         </div>
       )}

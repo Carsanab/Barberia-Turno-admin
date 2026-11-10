@@ -1392,3 +1392,71 @@ body {
     font-size: 1.1rem;
   }
 }
+
+/* FILTRO POR BARBERO */
+.barber-filter-section {
+  background: #1a1a2e;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #2a2a3e;
+  margin-bottom: 20px;
+}
+
+.barber-filter-section label {
+  display: block;
+  color: #aaa;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.barber-filter-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.barber-filter-btn {
+  padding: 8px 16px;
+  background: #0d0d0d;
+  border: 1px solid #2a2a3e;
+  color: #aaa;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.barber-filter-btn:hover {
+  border-color: #e94560;
+  color: #fff;
+}
+
+.barber-filter-btn.active {
+  background: #e94560;
+  border-color: #e94560;
+  color: white;
+}
+
+/* TAG DE BARBERO EN TABLA */
+.barber-tag {
+  background: rgba(233, 69, 96, 0.15);
+  color: #e94560;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+@media (max-width: 600px) {
+  .barber-filter-buttons {
+    gap: 8px;
+  }
+  
+  .barber-filter-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+}
