@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 
 export default function AdminPanel({ API_URL }) {
+  const [activeTab, setActiveTab] = useState('turnos');
+  
+  // Estados Turnos
   const [turnos, setTurnos] = useState([]);
-  const [barberos, setBarberos] = useState([]);
-  const [selectedBarberFilter, setSelectedBarberFilter] = useState('todos');
   const [config, setConfig] = useState({ fechaHasta: '', diasHabilitados: '' });
   const [filter, setFilter] = useState('todos');
   const [loading, setLoading] = useState(false);
@@ -19,30 +20,31 @@ export default function AdminPanel({ API_URL }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Estados Servicios y Barberos
+  const [servicios, setServicios] = useState([]);
+  const [barberos, setBarberos] = useState([]);
+  const [newService, setNewService] = useState({ nombre: '', duracion: '', precio: '' });
+  const [newBarber, setNewBarber] = useState({ nombre: '', especialidad: '', fotoUrl: '' });
+
   useEffect(() => {
     fetchTurnos();
     fetchConfig();
+    fetchServicios();
     fetchBarberos();
   }, []);
 
-  useEffect(() => {
-    generateWeeks();
-  }, [turnos, weekOffset]);
+  useEffect(() => { generateWeeks(); }, [turnos, weekOffset]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchTurnosSilent();
-    }, 30000);
+    const interval = setInterval(() => { if (activeTab === 'turnos') fetchTurnosSilent(); }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (turnos.length > lastTurnosCount && lastTurnosCount > 0) {
-      const nuevosTurnos = turnos.slice(lastTurnosCount);
-      const ultimoTurno = nuevosTurnos[nuevosTurnos.length - 1];
-      if (ultimoTurno && ultimoTurno.nombre) {
-        mostrarNotificacion(ultimoTurno);
-      }
+      const nuevos = turnos.slice(lastTurnosCount);
+      const ultimo = nuevos[nuevos.length - 1];
+      if (ultimo && ultimo.nombre) mostrarNotificacion(ultimo);
     }
     setLastTurnosCount(turnos.length);
   }, [turnos]);
@@ -52,9 +54,7 @@ export default function AdminPanel({ API_URL }) {
       const res = await fetch(`${API_URL}?action=getTurnos`);
       const data = await res.json();
       setTurnos(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const fetchTurnosSilent = async () => {
@@ -62,22 +62,23 @@ export default function AdminPanel({ API_URL }) {
       const res = await fetch(`${API_URL}?action=getTurnos`);
       const data = await res.json();
       setTurnos(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const fetchConfig = async () => {
     try {
       const res = await fetch(`${API_URL}?action=getConfig`);
       const data = await res.json();
-      setConfig({
-        fechaHasta: data.fechaHasta || '',
-        diasHabilitados: data.diasHabilitados || ''
-      });
-    } catch (e) {
-      console.error(e);
-    }
+      setConfig({ fechaHasta: data.fechaHasta || '', diasHabilitados: data.diasHabilitados || '' });
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchServicios = async () => {
+    try {
+      const res = await fetch(`${API_URL}?action=getServicios`);
+      const data = await res.json();
+      setServicios(Array.isArray(data) ? data : []);
+    } catch (e) { console.error(e); }
   };
 
   const fetchBarberos = async () => {
@@ -85,245 +86,163 @@ export default function AdminPanel({ API_URL }) {
       const res = await fetch(`${API_URL}?action=getBarberos`);
       const data = await res.json();
       setBarberos(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const generateWeeks = () => {
-    if (turnos.length === 0) {
-      setWeeks([]);
-      return;
-    }
-    const fechasUnicas = [...new Set(turnos.map(t => t.fecha))].sort();
+    if (turnos.length === 0) { setWeeks([]); return; }
+    const fechas = [...new Set(turnos.map(t => t.fecha))].sort();
     const weeksArray = [];
-    for (let i = 0; i < fechasUnicas.length; i += 7) {
-      weeksArray.push(fechasUnicas.slice(i, i + 7));
-    }
+    for (let i = 0; i < fechas.length; i += 7) weeksArray.push(fechas.slice(i, i + 7));
     setWeeks(weeksArray);
   };
 
-  const toggleDay = (fecha) => {
-    setExpandedDays(prev => ({ ...prev, [fecha]: !prev[fecha] }));
-  };
-
-  const expandAllWeek = () => {
-    const currentWeekFechas = weeks[weekOffset] || [];
-    const newExpanded = { ...expandedDays };
-    currentWeekFechas.forEach(f => { newExpanded[f] = true; });
-    setExpandedDays(newExpanded);
-  };
-
-  const collapseAll = () => {
-    setExpandedDays({});
-  };
-
-  const goToDate = (fecha) => {
-    setSearchDate(fecha);
-    for (let i = 0; i < weeks.length; i++) {
-      if (weeks[i].includes(fecha)) {
-        setWeekOffset(i);
-        setExpandedDays(prev => ({ ...prev, [fecha]: true }));
-        break;
+  // ─── ACCIONES DE GESTIÓN (CORREGIDAS Y ROBUSTAS) ───
+  const handleAddServicio = async () => {
+    if (!newService.nombre.trim() || !newService.duracion || !newService.precio) {
+      setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá nombre, duración y precio.', icon: 'warning' });
+      return;
+    }
+    try {
+      const res = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'addServicio', nombre: newService.nombre, duracion: newService.duracion, precio: newService.precio }) 
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El servicio "${newService.nombre}" se guardó correctamente.`, icon: 'success' });
+        setNewService({ nombre: '', duracion: '', precio: '' }); // ← BORRA LOS CAMPOS
+        fetchServicios(); // ← REFRESCA LA LISTA
+      } else {
+        setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
       }
+    } catch (error) {
+      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
     }
   };
 
-  const stats = {
-    total: turnos.length,
-    reservados: turnos.filter(t => t.nombre).length,
-    pendientes: turnos.filter(t => t.nombre && !t.confirmado).length,
-    confirmados: turnos.filter(t => t.confirmado).length,
-    libres: turnos.filter(t => !t.nombre && t.habilitado).length
+  const handleDeleteServicio = async (id) => {
+    if (!confirm('¿Eliminar este servicio?')) return;
+    try {
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteServicio', id }) });
+      const data = await res.json();
+      if (data.success) { 
+        fetchServicios(); 
+        setSuccessModal({ title: '✅ Eliminado', message: 'Servicio eliminado correctamente.', icon: 'success' }); 
+      }
+    } catch (e) { console.error(e); }
   };
 
-  const mostrarNotificacion = (turno) => {
+  const handleAddBarbero = async () => {
+    if (!newBarber.nombre.trim()) {
+      setSuccessModal({ title: '⚠️ Campo incompleto', message: 'El nombre del barbero es obligatorio.', icon: 'warning' });
+      return;
+    }
+    try {
+      const res = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'addBarbero', nombre: newBarber.nombre, especialidad: newBarber.especialidad, fotoUrl: newBarber.fotoUrl }) 
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El barbero "${newBarber.nombre}" se guardó correctamente.`, icon: 'success' });
+        setNewBarber({ nombre: '', especialidad: '', fotoUrl: '' }); // ← BORRA LOS CAMPOS
+        fetchBarberos(); // ← REFRESCA LA LISTA
+      } else {
+        setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
+      }
+    } catch (error) {
+      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+    }
+  };
+
+  const handleDeleteBarbero = async (id) => {
+    if (!confirm('¿Eliminar este barbero?')) return;
+    try {
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteBarbero', id }) });
+      const data = await res.json();
+      if (data.success) { 
+        fetchBarberos(); 
+        setSuccessModal({ title: '✅ Eliminado', message: 'Barbero eliminado correctamente.', icon: 'success' }); 
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  // ─── FUNCIONES DE TURNOS ───
+  const toggleDay = (fecha) => setExpandedDays(prev => ({ ...prev, [fecha]: !prev[fecha] }));
+  const expandAllWeek = () => { const f = weeks[weekOffset] || []; const n = { ...expandedDays }; f.forEach(x => n[x] = true); setExpandedDays(n); };
+  const collapseAll = () => setExpandedDays({});
+  const goToDate = (fecha) => { setSearchDate(fecha); for (let i = 0; i < weeks.length; i++) { if (weeks[i].includes(fecha)) { setWeekOffset(i); setExpandedDays(prev => ({ ...prev, [fecha]: true })); break; } } };
+  
+  const stats = { total: turnos.length, reservados: turnos.filter(t => t.nombre).length, pendientes: turnos.filter(t => t.nombre && !t.confirmado).length, confirmados: turnos.filter(t => t.confirmado).length };
+  
+  const mostrarNotificacion = (t) => {
     if (!notificationsEnabled) return;
-    const dayName = getDayName(turno.fecha);
-    const dateFormatted = formatDate(turno.fecha);
-    setNewReservationToast({
-      nombre: turno.nombre,
-      telefono: turno.telefono,
-      fecha: `${dayName} ${dateFormatted}`,
-      horario: turno.horario,
-      barbero: turno.barbero
-    });
+    setNewReservationToast({ nombre: t.nombre, telefono: t.telefono, fecha: `${getDayName(t.fecha)} ${formatDate(t.fecha)}`, horario: t.horario, barbero: t.barbero });
     if (soundEnabled) playNotificationSound();
     setTimeout(() => setNewReservationToast(null), 8000);
   };
 
   const playNotificationSound = () => {
     try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.frequency.value = 800;
-      oscillator.type = 'sine';
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
-      setTimeout(() => {
-        const osc2 = audioContext.createOscillator();
-        const gain2 = audioContext.createGain();
-        osc2.connect(gain2);
-        gain2.connect(audioContext.destination);
-        osc2.frequency.value = 1000;
-        gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        osc2.start(audioContext.currentTime);
-        osc2.stop(audioContext.currentTime + 0.5);
-      }, 200);
-    } catch (e) {
-      console.log('No se pudo reproducir sonido');
-    }
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination); osc.frequency.value = 800;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {}
   };
 
   const handleGenerar = async () => {
-    if (!config.fechaHasta || !config.diasHabilitados) {
-      setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá fecha hasta y días habilitados.', icon: 'warning' });
-      return;
-    }
-    setConfirmModal({
-      title: '⚠️ Generar Turnos',
-      message: 'Esto borrará TODOS los turnos existentes y generará nuevos para cada barbero activo. ¿Continuar?',
-      icon: 'warning',
-      onConfirm: async () => {
-        setLoading(true);
-        setConfirmModal(null);
-        try {
-          await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
-          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'generarDesdeConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
-          const data = await res.json();
-          if (data.success) {
-            setSuccessModal({ title: '✅ Proceso Completado', message: data.message, icon: 'success' });
-            fetchTurnos();
-          } else {
-            setSuccessModal({ title: '❌ Error', message: data.error, icon: 'error' });
-          }
-        } catch (e) {
-          setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar.', icon: 'error' });
-        }
-        setLoading(false);
-      }
-    });
-  };
-
-  const handleConfirmar = (turno) => {
-    if (turno.confirmado) {
-      confirmarTurnoAPI(turno);
-      return;
-    }
-    if (!turno.nombre || !turno.telefono) {
-      setSuccessModal({ title: '⚠️ Información incompleta', message: `No se puede confirmar el turno de las ${turno.horario} (${turno.barbero}) porque falta información del cliente.`, icon: 'warning' });
-      return;
-    }
-    setConfirmModal({
-      title: '✅ Confirmar Turno',
-      message: `¿Confirmar el turno de ${turno.nombre} (${turno.telefono}) con ${turno.barbero} el ${formatDate(turno.fecha)} a las ${turno.horario}?`,
-      icon: 'confirm',
-      onConfirm: async () => {
-        setConfirmModal(null);
-        await confirmarTurnoAPI(turno);
-      }
-    });
-  };
-
-  const confirmarTurnoAPI = async (turno) => {
-    try {
-      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmar', id: turno.id }) });
+    if (!config.fechaHasta || !config.diasHabilitados) { setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá fecha y días.', icon: 'warning' }); return; }
+    setConfirmModal({ title: '⚠️ Generar Turnos', message: 'Esto borrará los turnos existentes y generará nuevos para cada barbero activo.', icon: 'warning', onConfirm: async () => {
+      setLoading(true); setConfirmModal(null);
+      await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'generarDesdeConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
       const data = await res.json();
-      if (data.success) {
-        if (data.confirmado) setContactModal({ turno, confirmado: true });
-        fetchTurnos();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      if (data.success) { setSuccessModal({ title: '✅ Proceso Completado', message: data.message, icon: 'success' }); fetchTurnos(); }
+      else { setSuccessModal({ title: '❌ Error', message: data.error, icon: 'error' }); }
+      setLoading(false);
+    }});
   };
 
-  const handleToggleHabilitar = async (id) => {
-    try {
-      await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'toggleHabilitar', id }) });
+  const handleConfirmar = (t) => {
+    if (t.confirmado) { confirmarTurnoAPI(t); return; }
+    if (!t.nombre || !t.telefono) { setSuccessModal({ title: '⚠️ Info incompleta', message: 'Faltan datos del cliente.', icon: 'warning' }); return; }
+    setConfirmModal({ title: '✅ Confirmar', message: `¿Confirmar turno de ${t.nombre} con ${t.barbero}?`, icon: 'confirm', onConfirm: async () => { setConfirmModal(null); await confirmarTurnoAPI(t); } });
+  };
+
+  const confirmarTurnoAPI = async (t) => {
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmar', id: t.id }) });
+    const data = await res.json();
+    if (data.success) { if (data.confirmado) setContactModal({ turno: t, confirmado: true }); fetchTurnos(); }
+  };
+
+  const handleCancelar = (t) => {
+    setConfirmModal({ title: '🗑️ Cancelar', message: `¿Cancelar reserva de ${t.nombre}?`, icon: 'delete', onConfirm: async () => {
+      setConfirmModal(null);
+      await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelar', id: t.id }) });
+      setSuccessModal({ title: '✅ Cancelado', message: 'Reserva eliminada', icon: 'success' });
       fetchTurnos();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleCancelar = (turno) => {
-    setConfirmModal({
-      title: '🗑️ Cancelar Reserva',
-      message: `¿Cancelar la reserva de ${turno.nombre} con ${turno.barbero} el ${formatDate(turno.fecha)} a las ${turno.horario}?`,
-      icon: 'delete',
-      onConfirm: async () => {
-        setConfirmModal(null);
-        try {
-          await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelar', id: turno.id }) });
-          setSuccessModal({ title: '✅ Proceso Completado', message: `La reserva de ${turno.nombre} fue cancelada.`, icon: 'success' });
-          fetchTurnos();
-        } catch (e) {
-          setSuccessModal({ title: '❌ Error', message: 'No se pudo cancelar.', icon: 'error' });
-        }
-      }
-    });
+    }});
   };
 
   const handleEliminarDia = (fecha) => {
-    const turnosDelDia = turnos.filter(t => t.fecha === fecha);
-    const reservados = turnosDelDia.filter(t => t.nombre).length;
-    setConfirmModal({
-      title: '🗑️ Eliminar Día Completo',
-      message: `Se eliminarán ${turnosDelDia.length} turnos (${reservados} reservados) del ${formatDate(fecha)}.`,
-      icon: 'danger',
-      onConfirm: async () => {
-        setConfirmModal(null);
-        try {
-          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'eliminarDia', fecha }) });
-          const data = await res.json();
-          if (data.success) {
-            setSuccessModal({ title: '✅ Proceso Completado', message: `Se eliminaron ${data.eliminados} turnos del ${formatDate(fecha)}.`, icon: 'success' });
-            fetchTurnos();
-          } else {
-            setSuccessModal({ title: '❌ Error', message: data.error, icon: 'error' });
-          }
-        } catch (e) {
-          setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar.', icon: 'error' });
-        }
-      }
-    });
+    const delDia = turnos.filter(t => t.fecha === fecha);
+    setConfirmModal({ title: '🗑️ Eliminar Día', message: `Se eliminarán ${delDia.length} turnos del ${formatDate(fecha)}.`, icon: 'danger', onConfirm: async () => {
+      setConfirmModal(null);
+      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'eliminarDia', fecha }) });
+      const data = await res.json();
+      if (data.success) { setSuccessModal({ title: '✅ Eliminado', message: `${data.eliminados} turnos eliminados`, icon: 'success' }); fetchTurnos(); }
+    }});
   };
 
-  const getWhatsAppMessage = (turno) => {
-    const dayName = getDayName(turno.fecha);
-    const dateFormatted = formatDate(turno.fecha);
-    return `Hola ${turno.nombre}! 👋\n\nTe confirmamos tu turno en *The Barber Cut* ✂️\n\n👨‍🎨 Barbero: ${turno.barbero}\n💇 Servicio: ${turno.servicio || 'No especificado'}\n📅 ${dayName} ${dateFormatted}\n🕐 ${turno.horario}\n\n¡Te esperamos!`;
-  };
-
-  const normalizePhoneForWhatsApp = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length <= 10) return `54${cleaned}`;
-    return cleaned;
-  };
-
-  const handleWhatsApp = () => {
-    if (!contactModal) return;
-    const phone = normalizePhoneForWhatsApp(contactModal.turno.telefono);
-    const message = encodeURIComponent(getWhatsAppMessage(contactModal.turno));
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-    setContactModal(null);
-  };
-
-  const handleCall = () => {
-    if (!contactModal) return;
-    window.location.href = `tel:${contactModal.turno.telefono}`;
-    setContactModal(null);
-  };
+  const getWhatsAppMessage = (t) => `Hola ${t.nombre}! 👋\n\nTurno confirmado en *The Barber Cut* ✂️\n👨‍🎨 ${t.barbero}\n💇 ${t.servicio || 'Servicio'}\n📅 ${getDayName(t.fecha)} ${formatDate(t.fecha)}\n🕐 ${t.horario}\n\n¡Te esperamos!`;
+  const normalizePhone = (p) => { const c = p.replace(/\D/g, ''); return c.length <= 10 ? `54${c}` : c; };
+  const handleWhatsApp = () => { if (!contactModal) return; window.open(`https://wa.me/${normalizePhone(contactModal.turno.telefono)}?text=${encodeURIComponent(getWhatsAppMessage(contactModal.turno))}`, '_blank'); setContactModal(null); };
+  const handleCall = () => { if (!contactModal) return; window.location.href = `tel:${contactModal.turno.telefono}`; setContactModal(null); };
 
   const turnosFiltrados = turnos.filter(t => {
-    if (selectedBarberFilter !== 'todos' && t.barbero !== selectedBarberFilter) return false;
     if (filter === 'confirmados') return t.confirmado;
     if (filter === 'pendientes') return t.nombre && !t.confirmado;
     if (filter === 'reservados') return t.nombre;
@@ -331,277 +250,234 @@ export default function AdminPanel({ API_URL }) {
     return true;
   });
 
-  const agruparPorFecha = (listaTurnos) => {
-    const grupos = {};
-    listaTurnos.forEach(t => {
-      if (!grupos[t.fecha]) grupos[t.fecha] = [];
-      grupos[t.fecha].push(t);
-    });
-    return grupos;
+  const agruparPorFecha = (lista) => {
+    const g = {}; lista.forEach(t => { if (!g[t.fecha]) g[t.fecha] = []; g[t.fecha].push(t); }); return g;
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
-  const getDayName = (dateStr) => {
-    if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
-    const date = new Date(year, month - 1, day);
-    const names = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    return names[date.getDay()];
-  };
-
-  const getDayNameFull = (dateStr) => {
-    if (!dateStr) return '';
-    const [year, month, day] = dateStr.split('-');
-    const date = new Date(year, month - 1, day);
-    const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    return names[date.getDay()];
-  };
-
-  const diasSemana = [
-    { v: 0, l: 'Dom' }, { v: 1, l: 'Lun' }, { v: 2, l: 'Mar' },
-    { v: 3, l: 'Mié' }, { v: 4, l: 'Jue' }, { v: 5, l: 'Vie' }, { v: 6, l: 'Sáb' }
-  ];
-
-  const handleWeekChange = (direction) => {
-    const newOffset = weekOffset + direction;
-    if (newOffset >= 0 && newOffset < weeks.length) {
-      setWeekOffset(newOffset);
-      setExpandedDays({});
-    }
-  };
-
+  const formatDate = (d) => { if (!d) return ''; const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; };
+  const getDayName = (d) => { if (!d) return ''; const names = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']; return names[new Date(d.split('-')[0], d.split('-')[1] - 1, d.split('-')[2]).getDay()]; };
+  const getDayNameFull = (d) => { if (!d) return ''; const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']; return names[new Date(d.split('-')[0], d.split('-')[1] - 1, d.split('-')[2]).getDay()]; };
+  const diasSemana = [{ v: 0, l: 'Dom' }, { v: 1, l: 'Lun' }, { v: 2, l: 'Mar' }, { v: 3, l: 'Mié' }, { v: 4, l: 'Jue' }, { v: 5, l: 'Vie' }, { v: 6, l: 'Sáb' }];
+  
+  const handleWeekChange = (dir) => { const n = weekOffset + dir; if (n >= 0 && n < weeks.length) { setWeekOffset(n); setExpandedDays({}); } };
   const currentWeekFechas = weeks[weekOffset] || [];
-  const turnosDeLaSemana = turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha));
-  const gruposSemana = agruparPorFecha(turnosDeLaSemana);
+  const gruposSemana = agruparPorFecha(turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha)));
+  const getDaySummary = (fecha) => { const delDia = turnos.filter(t => t.fecha === fecha); return { total: delDia.length, reservados: delDia.filter(t => t.nombre).length, pendientes: delDia.filter(t => t.nombre && !t.confirmado).length, confirmados: delDia.filter(t => t.confirmado).length }; };
 
-  const getDaySummary = (fecha) => {
-    const turnosDelDia = turnos.filter(t => t.fecha === fecha);
-    const reservados = turnosDelDia.filter(t => t.nombre).length;
-    const pendientes = turnosDelDia.filter(t => t.nombre && !t.confirmado).length;
-    const confirmados = turnosDelDia.filter(t => t.confirmado).length;
-    return { total: turnosDelDia.length, reservados, pendientes, confirmados };
-  };
-
+  // ─── RENDERIZADO ───
   return (
     <div className="admin-panel">
-      {/* ESTADÍSTICAS */}
-      <div className="stats-bar">
-        <div className="stat-card stat-total">
-          <span className="stat-number">{stats.total}</span>
-          <span className="stat-label">Total</span>
-        </div>
-        <div className="stat-card stat-reservados">
-          <span className="stat-number">{stats.reservados}</span>
-          <span className="stat-label">Reservados</span>
-        </div>
-        <div className="stat-card stat-pendientes">
-          <span className="stat-number">{stats.pendientes}</span>
-          <span className="stat-label">⏳ Pendientes</span>
-        </div>
-        <div className="stat-card stat-confirmados">
-          <span className="stat-number">{stats.confirmados}</span>
-          <span className="stat-label">✅ Confirmados</span>
-        </div>
+      {/* TABS DE NAVEGACIÓN */}
+      <div className="admin-tabs">
+        <button className={`tab-btn ${activeTab === 'turnos' ? 'active' : ''}`} onClick={() => setActiveTab('turnos')}>📅 Turnos</button>
+        <button className={`tab-btn ${activeTab === 'servicios' ? 'active' : ''}`} onClick={() => setActiveTab('servicios')}>💇 Servicios</button>
+        <button className={`tab-btn ${activeTab === 'barberos' ? 'active' : ''}`} onClick={() => setActiveTab('barberos')}>👨‍🎨 Barberos</button>
       </div>
 
-      {/* ALERTA DE PENDIENTES */}
-      {stats.pendientes > 0 && (
-        <div className="alert-pendientes" onClick={() => setFilter('pendientes')}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <span>Tenés <strong>{stats.pendientes} turno{stats.pendientes > 1 ? 's' : ''}</strong> pendiente{stats.pendientes > 1 ? 's' : ''} de confirmar</span>
-          <span className="alert-arrow">→</span>
-        </div>
-      )}
-
-      {/* CONFIGURACIÓN */}
-      <div className="config-section">
-        <h3>⚙️ Generar Turnos</h3>
-        <div className="config-row">
-          <label>Fecha hasta:
-            <input type="date" value={config.fechaHasta} onChange={e => setConfig({ ...config, fechaHasta: e.target.value })} />
-          </label>
-        </div>
-        <div className="config-row">
-          <label>Días habilitados:</label>
-          <div className="dias-checks">
-            {diasSemana.map(d => (
-              <label key={d.v} className="dia-check">
-                <input type="checkbox" checked={config.diasHabilitados.split(',').map(Number).includes(d.v)} onChange={() => {
-                  const arr = config.diasHabilitados.split(',').map(Number);
-                  if (arr.includes(d.v)) setConfig({ ...config, diasHabilitados: arr.filter(x => x !== d.v).join(',') });
-                  else { arr.push(d.v); setConfig({ ...config, diasHabilitados: arr.sort().join(',') }); }
-                }} />
-                {d.l}
-              </label>
-            ))}
+      {/* ==================== TAB: TURNOS ==================== */}
+      {activeTab === 'turnos' && (
+        <>
+          <div className="stats-bar">
+            <div className="stat-card stat-total"><span className="stat-number">{stats.total}</span><span className="stat-label">Total</span></div>
+            <div className="stat-card stat-reservados"><span className="stat-number">{stats.reservados}</span><span className="stat-label">Reservados</span></div>
+            <div className="stat-card stat-pendientes"><span className="stat-number">{stats.pendientes}</span><span className="stat-label">⏳ Pendientes</span></div>
+            <div className="stat-card stat-confirmados"><span className="stat-number">{stats.confirmados}</span><span className="stat-label">✅ Confirmados</span></div>
           </div>
-        </div>
-        <button className="btn-generar" onClick={handleGenerar} disabled={loading}>
-          {loading ? 'Generando...' : '🔄 Generar Turnos'}
-        </button>
-      </div>
 
-      {/* FILTRO POR BARBERO */}
-      {barberos.length > 0 && (
-        <div className="barber-filter-section">
-          <label>👨‍🎨 Filtrar por barbero:</label>
-          <div className="barber-filter-buttons">
-            <button className={`barber-filter-btn ${selectedBarberFilter === 'todos' ? 'active' : ''}`} onClick={() => setSelectedBarberFilter('todos')}>
-              Todos
-            </button>
-            {barberos.map(b => (
-              <button key={b.id} className={`barber-filter-btn ${selectedBarberFilter === b.nombre ? 'active' : ''}`} onClick={() => setSelectedBarberFilter(b.nombre)}>
-                {b.nombre}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* FILTROS */}
-      <div className="filters">
-        {['todos', 'reservados', 'pendientes', 'confirmados', 'libres'].map(f => (
-          <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
-            {f.charAt(0).toUpperCase() + f.slice(1)} ({f === 'todos' ? turnos.length : turnosFiltrados.length})
-          </button>
-        ))}
-      </div>
-
-      {/* BUSCADOR DE FECHA */}
-      <div className="search-section">
-        <label>🔍 Ir a fecha específica:</label>
-        <input type="date" value={searchDate} min={new Date().toISOString().split('T')[0]} onChange={e => { setSearchDate(e.target.value); if (e.target.value) goToDate(e.target.value); }} className="search-date-input" />
-      </div>
-
-      {/* NAVEGACIÓN DE SEMANAS */}
-      {weeks.length > 0 && (
-        <div className="week-nav-admin">
-          <button className="week-nav-btn" onClick={() => handleWeekChange(-1)} disabled={weekOffset === 0}>← Anterior</button>
-          <div className="week-actions">
-            <span className="week-label">Semana {weekOffset + 1} de {weeks.length}</span>
-            <div className="week-buttons">
-              <button className="btn-small" onClick={expandAllWeek}>Expandir todo</button>
-              <button className="btn-small" onClick={collapseAll}>Colapsar todo</button>
+          {stats.pendientes > 0 && (
+            <div className="alert-pendientes" onClick={() => setFilter('pendientes')}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span>Tenés <strong>{stats.pendientes}</strong> pendiente{stats.pendientes > 1 ? 's' : ''} de confirmar</span>
+              <span className="alert-arrow">→</span>
             </div>
-          </div>
-          <button className="week-nav-btn" onClick={() => handleWeekChange(1)} disabled={weekOffset >= weeks.length - 1}>Siguiente →</button>
-        </div>
-      )}
+          )}
 
-      {/* DÍAS ACORDEÓN */}
-      {currentWeekFechas.length === 0 ? (
-        <p className="no-turnos">No hay turnos para mostrar</p>
-      ) : (
-        currentWeekFechas.map(fecha => {
-          const turnosDelDia = gruposSemana[fecha] || [];
-          if (turnosDelDia.length === 0) return null;
-          const summary = getDaySummary(fecha);
-          const isExpanded = expandedDays[fecha] || false;
-          const hasPendientes = summary.pendientes > 0;
-          return (
-            <div key={fecha} className={`day-accordion ${isExpanded ? 'expanded' : ''} ${hasPendientes ? 'has-pendientes' : ''}`}>
-              <div className="day-header" onClick={() => toggleDay(fecha)}>
-                <div className="day-header-left">
-                  <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                  <div className="day-title">
-                    <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
-                    <div className="day-badges">
-                      <span className="badge badge-total">{summary.total} turnos</span>
-                      {summary.reservados > 0 && <span className="badge badge-reservados">{summary.reservados} reservados</span>}
-                      {summary.confirmados > 0 && <span className="badge badge-confirmados">{summary.confirmados} confirmados</span>}
-                      {hasPendientes && <span className="badge badge-pendientes">⏳ {summary.pendientes} pendientes</span>}
+          <div className="config-section">
+            <h3>⚙️ Generar Turnos</h3>
+            <div className="config-row">
+              <label>Fecha hasta: <input type="date" value={config.fechaHasta} onChange={e => setConfig({ ...config, fechaHasta: e.target.value })} /></label>
+            </div>
+            <div className="config-row">
+              <label>Días habilitados:</label>
+              <div className="dias-checks">
+                {diasSemana.map(d => (
+                  <label key={d.v} className="dia-check">
+                    <input type="checkbox" checked={config.diasHabilitados.split(',').map(Number).includes(d.v)} onChange={() => {
+                      const arr = config.diasHabilitados.split(',').map(Number);
+                      if (arr.includes(d.v)) setConfig({ ...config, diasHabilitados: arr.filter(x => x !== d.v).join(',') });
+                      else { arr.push(d.v); setConfig({ ...config, diasHabilitados: arr.sort().join(',') }); }
+                    }} /> {d.l}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button className="btn-generar" onClick={handleGenerar} disabled={loading}>{loading ? 'Generando...' : '🔄 Generar Turnos'}</button>
+          </div>
+
+          <div className="filters">
+            {['todos', 'reservados', 'pendientes', 'confirmados', 'libres'].map(f => (
+              <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>{f.charAt(0).toUpperCase() + f.slice(1)}</button>
+            ))}
+          </div>
+
+          <div className="search-section">
+            <label>🔍 Ir a fecha:</label>
+            <input type="date" value={searchDate} min={new Date().toISOString().split('T')[0]} onChange={e => { setSearchDate(e.target.value); if (e.target.value) goToDate(e.target.value); }} className="search-date-input" />
+          </div>
+
+          {weeks.length > 0 && (
+            <div className="week-nav-admin">
+              <button className="week-nav-btn" onClick={() => handleWeekChange(-1)} disabled={weekOffset === 0}>← Anterior</button>
+              <div className="week-actions">
+                <span className="week-label">Semana {weekOffset + 1} de {weeks.length}</span>
+                <div className="week-buttons">
+                  <button className="btn-small" onClick={expandAllWeek}>Expandir</button>
+                  <button className="btn-small" onClick={collapseAll}>Colapsar</button>
+                </div>
+              </div>
+              <button className="week-nav-btn" onClick={() => handleWeekChange(1)} disabled={weekOffset >= weeks.length - 1}>Siguiente →</button>
+            </div>
+          )}
+
+          {currentWeekFechas.length === 0 ? <p className="no-turnos">No hay turnos</p> : currentWeekFechas.map(fecha => {
+            const delDia = gruposSemana[fecha] || [];
+            if (delDia.length === 0) return null;
+            const summary = getDaySummary(fecha);
+            const isExpanded = expandedDays[fecha] || false;
+            return (
+              <div key={fecha} className={`day-accordion ${isExpanded ? 'expanded' : ''} ${summary.pendientes > 0 ? 'has-pendientes' : ''}`}>
+                <div className="day-header" onClick={() => toggleDay(fecha)}>
+                  <div className="day-header-left">
+                    <svg className={`chevron ${isExpanded ? 'rotated' : ''}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    <div className="day-title">
+                      <h3>{getDayNameFull(fecha)} {formatDate(fecha)}</h3>
+                      <div className="day-badges">
+                        <span className="badge badge-total">{summary.total}</span>
+                        {summary.reservados > 0 && <span className="badge badge-reservados">{summary.reservados} res.</span>}
+                        {summary.pendientes > 0 && <span className="badge badge-pendientes">⏳ {summary.pendientes} pend.</span>}
+                      </div>
                     </div>
                   </div>
+                  <button className="btn-eliminar-dia" onClick={(e) => { e.stopPropagation(); handleEliminarDia(fecha); }}>🗑️</button>
                 </div>
-                <button className="btn-eliminar-dia" onClick={(e) => { e.stopPropagation(); handleEliminarDia(fecha); }}>🗑️</button>
-              </div>
-              {isExpanded && (
-                <div className="day-content">
-                  <div className="turnos-table-container">
-                    <table className="turnos-table">
-                      <thead>
-                        <tr>
-                          <th>Horario</th>
-                          <th>Barbero</th>
-                          <th>Cliente</th>
-                          <th>Teléfono</th>
-                          <th>Servicio</th>
-                          <th>Confirmado</th>
-                          <th>Habilitado</th>
-                          <th>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {turnosDelDia.map(t => (
-                          <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''} ${t.nombre && !t.confirmado ? 'pendiente-row' : ''}`}>
-                            <td className="horario-cell" data-label="Horario">{t.horario}</td>
-                            <td data-label="Barbero"><span className="barber-tag">{t.barbero}</span></td>
-                            <td data-label="Cliente">{t.nombre || <span className="empty-text">—</span>}</td>
-                            <td className="telefono-cell" data-label="Teléfono">{t.telefono ? <a href={`tel:${t.telefono}`} className="telefono-link">📞 {t.telefono}</a> : <span className="empty-text">—</span>}</td>
-                            <td data-label="Servicio">{t.servicio || <span className="empty-text">—</span>}</td>
-                            <td data-label="Confirmado"><input type="checkbox" checked={t.confirmado} onChange={() => handleConfirmar(t)} className="checkbox-confirm" title={!t.nombre || !t.telefono ? 'Falta info del cliente' : ''} /></td>
-                            <td data-label="Habilitado"><input type="checkbox" checked={t.habilitado} onChange={() => handleToggleHabilitar(t.id)} className="checkbox-habilitar" /></td>
-                            <td data-label="Acciones">{t.nombre && <button className="btn-cancelar" onClick={() => handleCancelar(t)}>🗑️</button>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {isExpanded && (
+                  <div className="day-content">
+                    <div className="turnos-table-container">
+                      <table className="turnos-table">
+                        <thead><tr><th>Horario</th><th>Barbero</th><th>Cliente</th><th>Teléfono</th><th>Servicio</th><th>Conf.</th><th>Hab.</th><th>Acc.</th></tr></thead>
+                        <tbody>
+                          {delDia.map(t => (
+                            <tr key={t.id} className={`${t.nombre ? 'reservado' : ''} ${t.confirmado ? 'confirmado-row' : ''} ${t.nombre && !t.confirmado ? 'pendiente-row' : ''}`}>
+                              <td className="horario-cell" data-label="Horario">{t.horario}</td>
+                              <td data-label="Barbero"><span className="barber-tag">{t.barbero}</span></td>
+                              <td data-label="Cliente">{t.nombre || '—'}</td>
+                              <td data-label="Teléfono">{t.telefono ? <a href={`tel:${t.telefono}`} className="telefono-link">📞</a> : '—'}</td>
+                              <td data-label="Servicio">{t.servicio || '—'}</td>
+                              <td data-label="Conf."><input type="checkbox" checked={t.confirmado} onChange={() => handleConfirmar(t)} className="checkbox-confirm" /></td>
+                              <td data-label="Hab."><input type="checkbox" checked={t.habilitado} onChange={() => {}} className="checkbox-habilitar" disabled /></td>
+                              <td data-label="Acc.">{t.nombre && <button className="btn-cancelar" onClick={() => handleCancelar(t)}>🗑️</button>}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          );
-        })
+                )}
+              </div>
+            );
+          })}
+        </>
       )}
 
-      {/* TOAST DE NUEVA RESERVA */}
+      {/* ==================== TAB: SERVICIOS ==================== */}
+      {activeTab === 'servicios' && (
+        <div className="management-section">
+          <h3>💇 Gestionar Servicios</h3>
+          <div className="add-form">
+            <input placeholder="Nombre (ej: Corte)" value={newService.nombre} onChange={e => setNewService({...newService, nombre: e.target.value})} />
+            <input type="number" placeholder="Duración (min)" value={newService.duracion} onChange={e => setNewService({...newService, duracion: e.target.value})} />
+            <input type="number" placeholder="Precio ($)" value={newService.precio} onChange={e => setNewService({...newService, precio: e.target.value})} />
+            <button className="btn-add" onClick={handleAddServicio}>+ Agregar</button>
+          </div>
+          <div className="management-list">
+            {servicios.map(s => (
+              <div key={s.id} className="management-item">
+                <div className="item-info">
+                  <strong>{s.nombre}</strong>
+                  <span>{s.duracion} min</span>
+                  <span className="item-price">${parseInt(s.precio).toLocaleString('es-AR')}</span>
+                </div>
+                <button className="btn-delete-item" onClick={() => handleDeleteServicio(s.id)}>🗑️</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== TAB: BARBEROS ==================== */}
+      {activeTab === 'barberos' && (
+        <div className="management-section">
+          <h3>👨‍🎨 Gestionar Barberos</h3>
+          <div className="add-form">
+            <input placeholder="Nombre" value={newBarber.nombre} onChange={e => setNewBarber({...newBarber, nombre: e.target.value})} />
+            <input placeholder="Especialidad (ej: Degradados)" value={newBarber.especialidad} onChange={e => setNewBarber({...newBarber, especialidad: e.target.value})} />
+            <input placeholder="URL de foto (Google Drive)" value={newBarber.fotoUrl} onChange={e => setNewBarber({...newBarber, fotoUrl: e.target.value})} />
+            <button className="btn-add" onClick={handleAddBarbero}>+ Agregar</button>
+          </div>
+          <div className="management-list">
+            {barberos.map(b => (
+              <div key={b.id} className="management-item">
+                <div className="item-info barber-info">
+                  {b.fotoUrl ? <img src={b.fotoUrl} alt={b.nombre} className="mini-avatar" /> : <div className="mini-avatar empty">{b.nombre.charAt(0)}</div>}
+                  <div>
+                    <strong>{b.nombre}</strong>
+                    <span>{b.especialidad}</span>
+                  </div>
+                </div>
+                <button className="btn-delete-item" onClick={() => handleDeleteBarbero(b.id)}>🗑️</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODALES ==================== */}
       {newReservationToast && (
         <div className="toast-notification" onClick={() => setNewReservationToast(null)}>
-          <div className="toast-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
-              <path d="M20 6L9 17l-5-5"/>
-            </svg>
-          </div>
+          <div className="toast-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg></div>
           <div className="toast-content">
             <h4>¡Nueva Reserva! 🎉</h4>
             <p><strong>{newReservationToast.nombre}</strong></p>
             <p>👨‍🎨 {newReservationToast.barbero}</p>
-            <p>📞 {newReservationToast.telefono}</p>
             <p>📅 {newReservationToast.fecha} a las {newReservationToast.horario}</p>
           </div>
           <button className="toast-close" onClick={(e) => { e.stopPropagation(); setNewReservationToast(null); }}>✕</button>
         </div>
       )}
 
-      {/* CONTROLES DE NOTIFICACIÓN */}
-      <div className="notification-controls">
-        <button className={`control-btn ${notificationsEnabled ? 'active' : ''}`} onClick={() => setNotificationsEnabled(!notificationsEnabled)} title={notificationsEnabled ? 'Silenciar notificaciones' : 'Activar notificaciones'}>
-          {notificationsEnabled ? '🔔' : '🔕'}
-        </button>
-        <button className={`control-btn ${soundEnabled ? 'active' : ''}`} onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? 'Silenciar sonido' : 'Activar sonido'}>
-          {soundEnabled ? '🔊' : '🔇'}
-        </button>
-      </div>
-
-      {/* MODALES */}
       {successModal && (
         <div className="modal-overlay" onClick={() => setSuccessModal(null)}>
           <div className="success-modal" onClick={e => e.stopPropagation()}>
             <div className={`success-icon-container ${successModal.icon}`}>
-              {successModal.icon === 'success' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>}
-              {successModal.icon === 'warning' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
-              {successModal.icon === 'error' && <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
+              {successModal.icon === 'success' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              )}
+              {successModal.icon === 'warning' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#ff9800" strokeWidth="2.5">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              )}
+              {successModal.icon === 'error' && (
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#f44336" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              )}
             </div>
             <h3>{successModal.title}</h3>
             <p className="success-message">{successModal.message}</p>
@@ -637,24 +513,15 @@ export default function AdminPanel({ API_URL }) {
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4caf50" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
               </div>
               <h3>¡Turno Confirmado!</h3>
-              <p className="modal-subtitle">¿Querés contactar al cliente?</p>
+              <p className="modal-subtitle">¿Contactar al cliente?</p>
             </div>
             <div className="modal-client-info">
-              <div className="client-detail"><span className="detail-label">👤 Cliente</span><span className="detail-value">{contactModal.turno.nombre}</span></div>
-              <div className="client-detail"><span className="detail-label">📞 Teléfono</span><span className="detail-value">{contactModal.turno.telefono}</span></div>
-              <div className="client-detail"><span className="detail-label">👨‍🎨 Barbero</span><span className="detail-value">{contactModal.turno.barbero}</span></div>
-              <div className="client-detail"><span className="detail-label">💇 Servicio</span><span className="detail-value">{contactModal.turno.servicio || 'No especificado'}</span></div>
-              <div className="client-detail"><span className="detail-label">📅 Turno</span><span className="detail-value">{getDayName(contactModal.turno.fecha)} {formatDate(contactModal.turno.fecha)} a las {contactModal.turno.horario}</span></div>
+              <div className="client-detail"><span>👤 Cliente</span><span>{contactModal.turno.nombre}</span></div>
+              <div className="client-detail"><span>👨‍🎨 Barbero</span><span>{contactModal.turno.barbero}</span></div>
             </div>
             <div className="modal-contact-actions">
-              <button className="btn-whatsapp" onClick={handleWhatsApp}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                WhatsApp
-              </button>
-              <button className="btn-call" onClick={handleCall}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-                Llamar
-              </button>
+              <button className="btn-whatsapp" onClick={handleWhatsApp}>WhatsApp</button>
+              <button className="btn-call" onClick={handleCall}>Llamar</button>
             </div>
             <button className="btn-close-modal" onClick={() => setContactModal(null)}>Cerrar</button>
           </div>
