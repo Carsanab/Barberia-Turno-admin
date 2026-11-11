@@ -111,7 +111,7 @@ export default function AdminPanel({ API_URL }) {
     setWeeks(weeksArray);
   };
 
-  // ─── MANEJO DE IMÁGENES (AGREGAR) ───
+  // ─── MANEJO DE IMÁGENES (AGREGAR) ──
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -120,7 +120,7 @@ export default function AdminPanel({ API_URL }) {
       const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
       setSuccessModal({ 
         title: '⚠️ Imagen demasiado pesada', 
-        message: `La imagen pesa ${sizeInMB} MB. El tamaño máximo permitido es 5 MB.`, 
+        message: `La imagen pesa ${sizeInMB} MB. El tamaño máximo permitido es 5 MB. Por favor, seleccioná una imagen más liviana o comprimila.`, 
         icon: 'warning' 
       });
       e.target.value = '';
@@ -130,7 +130,7 @@ export default function AdminPanel({ API_URL }) {
     if (!file.type.startsWith('image/')) {
       setSuccessModal({ 
         title: '⚠️ Archivo no válido', 
-        message: 'Solo se permiten archivos de imagen (JPG, PNG, etc.).', 
+        message: 'Solo se permiten archivos de imagen (JPG, PNG, WEBP, etc.).', 
         icon: 'warning' 
       });
       e.target.value = '';
@@ -182,7 +182,7 @@ export default function AdminPanel({ API_URL }) {
   // ─── AGREGAR SERVICIO ───
   const handleAddServicio = async () => {
     if (!newService.nombre.trim() || !newService.duracion || !newService.precio) {
-      setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá nombre, duración y precio.', icon: 'warning' });
+      setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Por favor, completá todos los campos: nombre, duración y precio.', icon: 'warning' });
       return;
     }
     try {
@@ -192,25 +192,25 @@ export default function AdminPanel({ API_URL }) {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El servicio "${newService.nombre}" se guardó correctamente.`, icon: 'success' });
+        setSuccessModal({ title: '✅ ¡Servicio Agregado!', message: `El servicio "${newService.nombre}" se guardó correctamente en la base de datos.`, icon: 'success' });
         setNewService({ nombre: '', duracion: '', precio: '' });
         fetchServicios();
       } else {
-        setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
+        setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar el servicio.', icon: 'error' });
       }
     } catch (error) {
-      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+      setSuccessModal({ title: '❌ Error de Conexión', message: 'No se pudo conectar con el servidor. Verificá tu conexión a internet.', icon: 'error' });
     }
   };
 
   const handleDeleteServicio = async (id) => {
-    if (!confirm('¿Eliminar este servicio?')) return;
+    if (!confirm('¿Estás seguro de eliminar este servicio? Esta acción no se puede deshacer.')) return;
     try {
       const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteServicio', id }) });
       const data = await res.json();
       if (data.success) { 
         fetchServicios(); 
-        setSuccessModal({ title: '✅ Eliminado', message: 'Servicio eliminado correctamente.', icon: 'success' }); 
+        setSuccessModal({ title: '✅ Servicio Eliminado', message: 'El servicio fue eliminado correctamente.', icon: 'success' }); 
       }
     } catch (e) { console.error(e); }
   };
@@ -265,7 +265,7 @@ export default function AdminPanel({ API_URL }) {
       const data = await res.json();
       
       if (data.success) {
-        setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El barbero "${newBarber.nombre}" se guardó correctamente.`, icon: 'success' });
+        setSuccessModal({ title: '✅ ¡Barbero Agregado!', message: `El barbero "${newBarber.nombre}" se guardó correctamente.`, icon: 'success' });
         setNewBarber({ nombre: '', especialidad: '', fotoUrl: '' });
         setSelectedImage(null);
         setImagePreview(null);
@@ -276,25 +276,25 @@ export default function AdminPanel({ API_URL }) {
         setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
       }
     } catch (error) {
-      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+      setSuccessModal({ title: '❌ Error de Conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleDeleteBarbero = async (id) => {
-    if (!confirm('¿Eliminar este barbero?')) return;
+    if (!confirm('¿Estás seguro de eliminar este barbero? Esta acción no se puede deshacer.')) return;
     try {
       const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteBarbero', id }) });
       const data = await res.json();
       if (data.success) { 
         fetchBarberos(); 
-        setSuccessModal({ title: '✅ Eliminado', message: 'Barbero eliminado correctamente.', icon: 'success' }); 
+        setSuccessModal({ title: '✅ Barbero Eliminado', message: 'El barbero fue eliminado correctamente.', icon: 'success' }); 
       }
     } catch (e) { console.error(e); }
   };
 
-  // ─── EDITAR BARBERO ───
+  // ── EDITAR BARBERO ───
   const handleEditBarbero = async () => {
     if (!editingBarber.nombre.trim()) {
       setSuccessModal({ title: '⚠️ Campo incompleto', message: 'El nombre es obligatorio.', icon: 'warning' });
@@ -327,7 +327,7 @@ export default function AdminPanel({ API_URL }) {
         if (uploadData.success) {
           finalFotoUrl = uploadData.url;
         } else {
-          setSuccessModal({ title: '❌ Error al subir imagen', message: uploadData.error, icon: 'error' });
+          setSuccessModal({ title: ' Error al subir imagen', message: uploadData.error, icon: 'error' });
           setIsUploading(false);
           return;
         }
@@ -357,7 +357,7 @@ export default function AdminPanel({ API_URL }) {
         setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo actualizar.', icon: 'error' });
       }
     } catch (error) {
-      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+      setSuccessModal({ title: '❌ Error de Conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
     } finally {
       setIsUploading(false);
     }
@@ -389,7 +389,7 @@ export default function AdminPanel({ API_URL }) {
   };
 
   const handleGenerar = async () => {
-    if (!config.fechaHasta || !config.diasHabilitados) { setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá fecha y días.', icon: 'warning' }); return; }
+    if (!config.fechaHasta || !config.diasHabilitados) { setSuccessModal({ title: '️ Campos incompletos', message: 'Completá fecha y días.', icon: 'warning' }); return; }
     setConfirmModal({ title: '⚠️ Generar Turnos', message: 'Esto borrará los turnos existentes y generará nuevos para cada barbero activo.', icon: 'warning', onConfirm: async () => {
       setLoading(true); setConfirmModal(null);
       await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateConfig', fechaHasta: config.fechaHasta, diasHabilitados: config.diasHabilitados }) });
@@ -459,7 +459,7 @@ export default function AdminPanel({ API_URL }) {
   const gruposSemana = agruparPorFecha(turnosFiltrados.filter(t => currentWeekFechas.includes(t.fecha)));
   const getDaySummary = (fecha) => { const delDia = turnos.filter(t => t.fecha === fecha); return { total: delDia.length, reservados: delDia.filter(t => t.nombre).length, pendientes: delDia.filter(t => t.nombre && !t.confirmado).length, confirmados: delDia.filter(t => t.confirmado).length }; };
 
-  // ─── RENDERIZADO ───
+  // ── RENDERIZADO ───
   return (
     <div className="admin-panel">
       {/* TABS DE NAVEGACIÓN */}
@@ -647,12 +647,11 @@ export default function AdminPanel({ API_URL }) {
                 </div>
               )}
               <label className="btn-select-image">
-                📷 Seleccionar o Tomar Foto
+                📷 Seleccionar Foto
                 <input 
                   id="barber-image-input"
                   type="file" 
-                  accept="image/*" 
-                  capture="environment" 
+                  accept="image/*"
                   onChange={handleImageChange} 
                   style={{ display: 'none' }} 
                 />
@@ -773,8 +772,7 @@ export default function AdminPanel({ API_URL }) {
                     📷 Cambiar Foto
                     <input 
                       type="file" 
-                      accept="image/*" 
-                      capture="environment" 
+                      accept="image/*"
                       onChange={handleEditImageChange} 
                       style={{ display: 'none' }} 
                     />
