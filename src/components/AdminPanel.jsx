@@ -25,6 +25,20 @@ export default function AdminPanel({ API_URL }) {
   const [barberos, setBarberos] = useState([]);
   const [newService, setNewService] = useState({ nombre: '', duracion: '', precio: '' });
   const [newBarber, setNewBarber] = useState({ nombre: '', especialidad: '', fotoUrl: '' });
+  
+  // Estados para subida de imágenes (agregar)
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Estados para edición de barbero
+  const [editingBarber, setEditingBarber] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editImagePreview, setEditImagePreview] = useState(null);
+  const [editSelectedImage, setEditSelectedImage] = useState(null);
+
+  // Límite máximo de imagen: 5MB
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
   useEffect(() => {
     fetchTurnos();
@@ -97,7 +111,75 @@ export default function AdminPanel({ API_URL }) {
     setWeeks(weeksArray);
   };
 
-  // ─── ACCIONES DE GESTIÓN (CORREGIDAS Y ROBUSTAS) ───
+  // ─── MANEJO DE IMÁGENES (AGREGAR) ───
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+      setSuccessModal({ 
+        title: '⚠️ Imagen demasiado pesada', 
+        message: `La imagen pesa ${sizeInMB} MB. El tamaño máximo permitido es 5 MB.`, 
+        icon: 'warning' 
+      });
+      e.target.value = '';
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setSuccessModal({ 
+        title: '⚠️ Archivo no válido', 
+        message: 'Solo se permiten archivos de imagen (JPG, PNG, etc.).', 
+        icon: 'warning' 
+      });
+      e.target.value = '';
+      return;
+    }
+
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ─── MANEJO DE IMÁGENES (EDITAR) ───
+  const handleEditImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      const sizeInMB = (file.size / (1024 * 1024)).toFixed(2);
+      setSuccessModal({ 
+        title: '⚠️ Imagen demasiado pesada', 
+        message: `La imagen pesa ${sizeInMB} MB. El tamaño máximo permitido es 5 MB.`, 
+        icon: 'warning' 
+      });
+      e.target.value = '';
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setSuccessModal({ 
+        title: '⚠️ Archivo no válido', 
+        message: 'Solo se permiten archivos de imagen.', 
+        icon: 'warning' 
+      });
+      e.target.value = '';
+      return;
+    }
+
+    setEditSelectedImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ─── AGREGAR SERVICIO ───
   const handleAddServicio = async () => {
     if (!newService.nombre.trim() || !newService.duracion || !newService.precio) {
       setSuccessModal({ title: '⚠️ Campos incompletos', message: 'Completá nombre, duración y precio.', icon: 'warning' });
@@ -111,8 +193,8 @@ export default function AdminPanel({ API_URL }) {
       const data = await res.json();
       if (data.success) {
         setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El servicio "${newService.nombre}" se guardó correctamente.`, icon: 'success' });
-        setNewService({ nombre: '', duracion: '', precio: '' }); // ← BORRA LOS CAMPOS
-        fetchServicios(); // ← REFRESCA LA LISTA
+        setNewService({ nombre: '', duracion: '', precio: '' });
+        fetchServicios();
       } else {
         setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
       }
@@ -133,26 +215,70 @@ export default function AdminPanel({ API_URL }) {
     } catch (e) { console.error(e); }
   };
 
+  // ─── AGREGAR BARBERO ───
   const handleAddBarbero = async () => {
     if (!newBarber.nombre.trim()) {
       setSuccessModal({ title: '⚠️ Campo incompleto', message: 'El nombre del barbero es obligatorio.', icon: 'warning' });
       return;
     }
+
+    setIsUploading(true);
+    let finalFotoUrl = '';
+
     try {
+      if (selectedImage) {
+        const base64Image = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(selectedImage);
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = error => reject(error);
+        });
+
+        const uploadRes = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            action: 'subirImagen', 
+            imagen: base64Image, 
+            nombreArchivo: `barbero_${newBarber.nombre.replace(/\s+/g, '_')}_${Date.now()}.jpg` 
+          })
+        });
+        const uploadData = await uploadRes.json();
+        
+        if (uploadData.success) {
+          finalFotoUrl = uploadData.url;
+        } else {
+          setSuccessModal({ title: '❌ Error al subir imagen', message: uploadData.error, icon: 'error' });
+          setIsUploading(false);
+          return;
+        }
+      }
+
       const res = await fetch(API_URL, { 
         method: 'POST', 
-        body: JSON.stringify({ action: 'addBarbero', nombre: newBarber.nombre, especialidad: newBarber.especialidad, fotoUrl: newBarber.fotoUrl }) 
+        body: JSON.stringify({ 
+          action: 'addBarbero', 
+          nombre: newBarber.nombre, 
+          especialidad: newBarber.especialidad, 
+          fotoUrl: finalFotoUrl 
+        }) 
       });
       const data = await res.json();
+      
       if (data.success) {
         setSuccessModal({ title: '✅ ¡Agregado con éxito!', message: `El barbero "${newBarber.nombre}" se guardó correctamente.`, icon: 'success' });
-        setNewBarber({ nombre: '', especialidad: '', fotoUrl: '' }); // ← BORRA LOS CAMPOS
-        fetchBarberos(); // ← REFRESCA LA LISTA
+        setNewBarber({ nombre: '', especialidad: '', fotoUrl: '' });
+        setSelectedImage(null);
+        setImagePreview(null);
+        const fileInput = document.getElementById('barber-image-input');
+        if (fileInput) fileInput.value = '';
+        fetchBarberos();
       } else {
         setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo agregar.', icon: 'error' });
       }
     } catch (error) {
       setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -166,6 +292,75 @@ export default function AdminPanel({ API_URL }) {
         setSuccessModal({ title: '✅ Eliminado', message: 'Barbero eliminado correctamente.', icon: 'success' }); 
       }
     } catch (e) { console.error(e); }
+  };
+
+  // ─── EDITAR BARBERO ───
+  const handleEditBarbero = async () => {
+    if (!editingBarber.nombre.trim()) {
+      setSuccessModal({ title: '⚠️ Campo incompleto', message: 'El nombre es obligatorio.', icon: 'warning' });
+      return;
+    }
+
+    setIsUploading(true);
+    let finalFotoUrl = null; // null = no cambiar la foto
+
+    try {
+      // Si hay nueva imagen seleccionada, subirla
+      if (editSelectedImage) {
+        const base64Image = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(editSelectedImage);
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = error => reject(error);
+        });
+
+        const uploadRes = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            action: 'subirImagen', 
+            imagen: base64Image, 
+            nombreArchivo: `barbero_${editingBarber.nombre.replace(/\s+/g, '_')}_${Date.now()}.jpg` 
+          })
+        });
+        const uploadData = await uploadRes.json();
+        
+        if (uploadData.success) {
+          finalFotoUrl = uploadData.url;
+        } else {
+          setSuccessModal({ title: '❌ Error al subir imagen', message: uploadData.error, icon: 'error' });
+          setIsUploading(false);
+          return;
+        }
+      }
+
+      // Actualizar el barbero
+      const res = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ 
+          action: 'updateBarbero', 
+          id: editingBarber.id,
+          nombre: editingBarber.nombre, 
+          especialidad: editingBarber.especialidad, 
+          fotoUrl: finalFotoUrl // null = no cambiar, string = nueva URL
+        }) 
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setSuccessModal({ title: '✅ ¡Actualizado!', message: `El barbero "${editingBarber.nombre}" fue actualizado correctamente.`, icon: 'success' });
+        setShowEditModal(false);
+        setEditingBarber(null);
+        setEditSelectedImage(null);
+        setEditImagePreview(null);
+        fetchBarberos();
+      } else {
+        setSuccessModal({ title: '❌ Error', message: data.error || 'No se pudo actualizar.', icon: 'error' });
+      }
+    } catch (error) {
+      setSuccessModal({ title: '❌ Error de conexión', message: 'No se pudo conectar con el servidor.', icon: 'error' });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // ─── FUNCIONES DE TURNOS ───
@@ -421,8 +616,52 @@ export default function AdminPanel({ API_URL }) {
           <div className="add-form">
             <input placeholder="Nombre" value={newBarber.nombre} onChange={e => setNewBarber({...newBarber, nombre: e.target.value})} />
             <input placeholder="Especialidad (ej: Degradados)" value={newBarber.especialidad} onChange={e => setNewBarber({...newBarber, especialidad: e.target.value})} />
-            <input placeholder="URL de foto (Google Drive)" value={newBarber.fotoUrl} onChange={e => setNewBarber({...newBarber, fotoUrl: e.target.value})} />
-            <button className="btn-add" onClick={handleAddBarbero}>+ Agregar</button>
+            
+            <div className="image-upload-container">
+              {imagePreview ? (
+                <div className="image-preview-wrapper">
+                  <img src={imagePreview} alt="Vista previa" className="image-preview" />
+                  <button 
+                    type="button" 
+                    className="btn-remove-image" 
+                    onClick={() => { 
+                      setSelectedImage(null); 
+                      setImagePreview(null); 
+                      const fileInput = document.getElementById('barber-image-input');
+                      if (fileInput) fileInput.value = '';
+                    }}
+                    title="Quitar imagen"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="image-placeholder">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                  <span>Sin foto seleccionada</span>
+                  <span className="image-size-hint">Máximo 5 MB</span>
+                </div>
+              )}
+              <label className="btn-select-image">
+                📷 Seleccionar o Tomar Foto
+                <input 
+                  id="barber-image-input"
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment" 
+                  onChange={handleImageChange} 
+                  style={{ display: 'none' }} 
+                />
+              </label>
+            </div>
+
+            <button className="btn-add" onClick={handleAddBarbero} disabled={isUploading}>
+              {isUploading ? '⏳ Subiendo imagen...' : '+ Agregar Barbero'}
+            </button>
           </div>
           <div className="management-list">
             {barberos.map(b => (
@@ -434,9 +673,122 @@ export default function AdminPanel({ API_URL }) {
                     <span>{b.especialidad}</span>
                   </div>
                 </div>
-                <button className="btn-delete-item" onClick={() => handleDeleteBarbero(b.id)}>🗑️</button>
+                <div className="item-actions">
+                  <button 
+                    className="btn-edit-item" 
+                    onClick={() => {
+                      setEditingBarber({...b});
+                      setShowEditModal(true);
+                      setEditSelectedImage(null);
+                      setEditImagePreview(null);
+                    }}
+                    title="Editar barbero"
+                  >
+                    ✏️
+                  </button>
+                  <button className="btn-delete-item" onClick={() => handleDeleteBarbero(b.id)}>🗑️</button>
+                </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL DE EDICIÓN DE BARBERO ==================== */}
+      {showEditModal && editingBarber && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="edit-modal" onClick={e => e.stopPropagation()}>
+            <div className="edit-modal-header">
+              <h3>✏️ Editar Barbero</h3>
+              <button className="btn-close-edit" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            
+            <div className="edit-form">
+              <div className="edit-field">
+                <label>Nombre:</label>
+                <input 
+                  value={editingBarber.nombre} 
+                  onChange={e => setEditingBarber({...editingBarber, nombre: e.target.value})} 
+                  placeholder="Nombre del barbero"
+                />
+              </div>
+              
+              <div className="edit-field">
+                <label>Especialidad:</label>
+                <input 
+                  value={editingBarber.especialidad} 
+                  onChange={e => setEditingBarber({...editingBarber, especialidad: e.target.value})} 
+                  placeholder="Ej: Degradados, Barba, etc."
+                />
+              </div>
+              
+              <div className="edit-field">
+                <label>Foto actual:</label>
+                <div className="current-image-preview">
+                  {editingBarber.fotoUrl ? (
+                    <img src={editingBarber.fotoUrl} alt="Foto actual" />
+                  ) : (
+                    <div className="no-image">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>Sin foto</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="edit-field">
+                <label>Nueva foto (opcional - Máx. 5MB):</label>
+                <div className="image-upload-container edit-upload">
+                  {editImagePreview ? (
+                    <div className="image-preview-wrapper">
+                      <img src={editImagePreview} alt="Nueva foto" className="image-preview" />
+                      <button 
+                        type="button" 
+                        className="btn-remove-image" 
+                        onClick={() => {
+                          setEditSelectedImage(null);
+                          setEditImagePreview(null);
+                        }}
+                        title="Quitar nueva foto"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="image-placeholder">
+                      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21 15 16 10 5 21"/>
+                      </svg>
+                      <span>Sin nueva foto seleccionada</span>
+                      <span className="image-size-hint">Si no elegís una, se mantiene la actual</span>
+                    </div>
+                  )}
+                  <label className="btn-select-image">
+                    📷 Cambiar Foto
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment" 
+                      onChange={handleEditImageChange} 
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-actions-edit">
+              <button className="btn-cancel-edit" onClick={() => setShowEditModal(false)}>Cancelar</button>
+              <button className="btn-save-edit" onClick={handleEditBarbero} disabled={isUploading}>
+                {isUploading ? '⏳ Guardando...' : '💾 Guardar Cambios'}
+              </button>
+            </div>
           </div>
         </div>
       )}
