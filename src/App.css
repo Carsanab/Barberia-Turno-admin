@@ -139,12 +139,13 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   ADMIN APP
+   ADMIN APP - ANCHO UNIFORME
    ═══════════════════════════════════════════ */
 .admin-app {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+  width: 100%;
 }
 
 .admin-header {
@@ -208,10 +209,11 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   ADMIN PANEL
+   ADMIN PANEL - ANCHO COMPLETO
    ═══════════════════════════════════════════ */
 .admin-panel {
-  padding: 0 10px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg {
@@ -235,6 +237,7 @@ body {
   padding: 15px;
   border-radius: 12px;
   border: 1px solid #2a2a3e;
+  width: 100%;
 }
 
 .tab-btn {
@@ -269,6 +272,7 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 15px;
   margin-bottom: 25px;
+  width: 100%;
 }
 
 .stat-card {
@@ -318,6 +322,7 @@ body {
   cursor: pointer;
   transition: all 0.3s;
   animation: pulse-alert 2s infinite;
+  width: 100%;
 }
 
 .alert-pendientes:hover {
@@ -347,7 +352,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   CONFIG SECTION
+   CONFIG SECTION (TURNOS)
    ═══════════════════════════════════════════ */
 .config-section {
   background: #1a1a2e;
@@ -355,6 +360,7 @@ body {
   border-radius: 15px;
   border: 1px solid #2a2a3e;
   margin-bottom: 30px;
+  width: 100%;
 }
 
 .config-section h3 {
@@ -450,6 +456,7 @@ body {
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .search-section label {
@@ -482,6 +489,7 @@ body {
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 30px;
+  width: 100%;
 }
 
 .filters button {
@@ -523,6 +531,7 @@ body {
   border: 1px solid #2a2a3e;
   flex-wrap: wrap;
   gap: 15px;
+  width: 100%;
 }
 
 .week-nav-btn {
@@ -593,6 +602,7 @@ body {
   margin-bottom: 15px;
   overflow: hidden;
   transition: all 0.3s;
+  width: 100%;
 }
 
 .day-accordion.has-pendientes {
@@ -825,6 +835,7 @@ body {
   border-radius: 12px;
   border: 1px solid #2a2a3e;
   margin-bottom: 25px;
+  width: 100%;
 }
 
 .barber-filter-section label {
@@ -875,7 +886,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   GESTIÓN DE SERVICIOS Y BARBEROS
+   GESTIÓN DE SERVICIOS Y BARBEROS - ANCHO UNIFORME
    ═══════════════════════════════════════════ */
 .management-section {
   background: #1a1a2e;
@@ -884,8 +895,7 @@ body {
   border: 1px solid #2a2a3e;
   margin-bottom: 30px;
   width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
+  max-width: none;
 }
 
 .management-section h3 {
@@ -907,6 +917,7 @@ body {
   background: #0d0d0d;
   border-radius: 12px;
   border: 1px solid #2a2a3e;
+  width: 100%;
 }
 
 .add-form input {
@@ -960,6 +971,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 15px;
+  width: 100%;
 }
 
 .management-item {
@@ -971,6 +983,7 @@ body {
   border-radius: 12px;
   border: 1px solid #2a2a3e;
   transition: all 0.3s;
+  width: 100%;
 }
 
 .management-item:hover {
